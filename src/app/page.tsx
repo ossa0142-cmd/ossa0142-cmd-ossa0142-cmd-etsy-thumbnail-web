@@ -42,6 +42,7 @@ type TopStyle = "centerText" | "fullCollage" | "cleanSpace" | "playfulPop";
 type PanelShape = "square" | "circle";
 type ClipartDensity = "low" | "normal" | "high";
 type ClipartPlacement = "auto" | "bestseller" | "grid" | "ring" | "collage" | "random";
+type TopAssetCount = "auto" | "4" | "8" | "12" | "16" | "20" | "25" | "all";
 
 type Rgb = {
   r: number;
@@ -129,6 +130,17 @@ const placementOptions: Array<{ label: string; value: ClipartPlacement }> = [
   { label: "円形配置", value: "ring" },
   { label: "コラージュ配置", value: "collage" },
   { label: "ランダム配置", value: "random" }
+];
+
+const topAssetCountOptions: Array<{ label: string; value: TopAssetCount }> = [
+  { label: "自動", value: "auto" },
+  { label: "4", value: "4" },
+  { label: "8", value: "8" },
+  { label: "12", value: "12" },
+  { label: "16", value: "16" },
+  { label: "20", value: "20" },
+  { label: "25", value: "25" },
+  { label: "全部", value: "all" }
 ];
 
 const fontOptions: FontOption[] = [
@@ -669,6 +681,15 @@ function resolveTopPlacement(placement: ClipartPlacement, assetCount: number): E
   return "bestseller";
 }
 
+function resolveTopAssetCount(option: TopAssetCount, uploadedCount: number, random: () => number) {
+  if (option === "all") return uploadedCount;
+  if (option !== "auto") return Math.min(uploadedCount, Number(option));
+  if (uploadedCount <= 8) return uploadedCount;
+  if (uploadedCount <= 16) return Math.min(uploadedCount, 10 + Math.floor(random() * 5));
+  if (uploadedCount <= 30) return Math.min(uploadedCount, 16 + Math.floor(random() * 9));
+  return Math.min(uploadedCount, 24 + Math.floor(random() * 12));
+}
+
 function shufflePoints(points: PlacementPoint[], random: () => number) {
   const shuffled = [...points];
   for (let index = shuffled.length - 1; index > 0; index -= 1) {
@@ -716,11 +737,11 @@ function createTopPlacementPoints(
   }
 
   if (placement === "ring") {
-    for (let index = 0; index < count + 8; index += 1) {
+    for (let index = 0; index < count + 18; index += 1) {
       const angle = (-Math.PI / 2) + (Math.PI * 2 * index) / Math.max(1, count + 2);
       points.push({
-        x: safeCenterX + Math.cos(angle) * ringRadiusX,
-        y: safeCenterY + Math.sin(angle) * ringRadiusY,
+        x: safeCenterX + Math.cos(angle) * (ringRadiusX + (index % 2) * 150),
+        y: safeCenterY + Math.sin(angle) * (ringRadiusY + (index % 3) * 110),
         scale: 0.86 + (index % 3) * 0.06
       });
     }
@@ -728,8 +749,8 @@ function createTopPlacementPoints(
   }
 
   if (placement === "grid") {
-    const columns = count <= 6 ? 3 : count <= 12 ? 4 : 5;
-    const rows = Math.ceil((count + 4) / columns);
+    const columns = count <= 6 ? 3 : count <= 12 ? 4 : count <= 20 ? 5 : 6;
+    const rows = Math.ceil((count + 8) / columns);
     const startX = 350;
     const startY = 350;
     const usableWidth = DESIGN_SIZE - startX * 2;
@@ -763,7 +784,7 @@ function createTopPlacementPoints(
     return shufflePoints(points, random);
   }
 
-  for (let index = 0; index < count + 16; index += 1) {
+  for (let index = 0; index < count + 28; index += 1) {
     points.push({
       x: 180 + random() * (DESIGN_SIZE - 360),
       y: 180 + random() * (DESIGN_SIZE - 360),
@@ -819,6 +840,7 @@ export default function Home() {
   const [topSmallTextY, setTopSmallTextY] = useState(250);
   const [topSmallTextX, setTopSmallTextX] = useState(0);
   const [clipartPlacement, setClipartPlacement] = useState<ClipartPlacement>("auto");
+  const [topAssetCount, setTopAssetCount] = useState<TopAssetCount>("auto");
   const [topClipartSize, setTopClipartSize] = useState(500);
   const [topClipartVariation, setTopClipartVariation] = useState(45);
   const [clipartDistance, setClipartDistance] = useState(70);
@@ -857,6 +879,10 @@ export default function Home() {
   const currentPageAssets = useMemo(
     () => cliparts.slice(selectedPage * pageSize, selectedPage * pageSize + pageSize),
     [cliparts, pageSize, selectedPage]
+  );
+  const topPreviewAssetCount = useMemo(
+    () => Math.min(cliparts.length, resolveTopAssetCount(topAssetCount, cliparts.length, seededRandom(topSeed))),
+    [cliparts.length, topAssetCount, topSeed]
   );
   const titleFont = getFont(titleFontKey);
   const subtitleFont = getFont(subtitleFontKey);
@@ -1061,8 +1087,8 @@ export default function Home() {
 
       const random = seededRandom(topSeed);
       const sourceAssets = assetSource === "uploaded" ? cliparts : cliparts;
-      const densityCount = clipartDensity === "low" ? 12 : clipartDensity === "high" ? 40 : 24;
-      const assets = sourceAssets.slice(0, Math.max(1, Math.min(sourceAssets.length, densityCount)));
+      const selectedAssetCount = resolveTopAssetCount(topAssetCount, sourceAssets.length, random);
+      const assets = sourceAssets.slice(0, Math.max(1, Math.min(sourceAssets.length, selectedAssetCount)));
       const resolvedPlacement = resolveTopPlacement(clipartPlacement, sourceAssets.length);
       const panelFill = `rgba(255, 255, 255, ${topStyle === "fullCollage" ? 0.9 : 0.82})`;
       const panelStroke = rgbToHex(mix(accentColor, hexToRgb("#ffffff"), 0.35));
@@ -1117,17 +1143,27 @@ export default function Home() {
               : resolvedPlacement === "collage"
                 ? 0.78
                 : 1;
+        const densityScale = clipartDensity === "low" ? 0.88 : clipartDensity === "high" ? 1.06 : 1;
+        const crowdScale =
+          assets.length >= 25
+            ? 0.64
+            : assets.length >= 20
+              ? 0.72
+              : assets.length >= 16
+                ? 0.82
+                : 1;
         const variation = 1 - topClipartVariation / 200 + random() * (topClipartVariation / 100);
-        const baseSize = topClipartSize * styleBoost * templateBoost * variation;
+        const baseSize = topClipartSize * styleBoost * templateBoost * densityScale * crowdScale * variation;
         let chosen: { x: number; y: number; drawWidth: number; drawHeight: number } | null = null;
 
-        for (let attempt = 0; attempt < Math.max(120, placementPoints.length); attempt += 1) {
+        for (let attempt = 0; attempt < Math.max(180, placementPoints.length * 2); attempt += 1) {
           const point = placementPoints[(placementCursor + attempt) % Math.max(1, placementPoints.length)] ?? {
             x: 180 + random() * (DESIGN_SIZE - 360),
             y: 180 + random() * (DESIGN_SIZE - 360),
             scale: 1
           };
-          const pointSize = baseSize * point.scale;
+          const retryScale = Math.max(0.54, 1 - attempt * 0.0045);
+          const pointSize = baseSize * point.scale * retryScale;
           const ratio = Math.min(pointSize / clipart.trimmedWidth, pointSize / clipart.trimmedHeight);
           const drawWidth = clipart.trimmedWidth * ratio;
           const drawHeight = clipart.trimmedHeight * ratio;
@@ -1135,11 +1171,12 @@ export default function Home() {
           let y = point.y + (resolvedPlacement === "random" || resolvedPlacement === "collage" ? (random() - 0.5) * 150 : 0);
           x = clamp(x, drawWidth / 2 + 40, DESIGN_SIZE - drawWidth / 2 - 40);
           y = clamp(y, drawHeight / 2 + 40, DESIGN_SIZE - drawHeight / 2 - 40);
+          const collisionGap = Math.max(8, clipartDistance - attempt * 1.6);
           const rect: Rect = {
-            x: x - drawWidth / 2 - clipartDistance / 2,
-            y: y - drawHeight / 2 - clipartDistance / 2,
-            width: drawWidth + clipartDistance,
-            height: drawHeight + clipartDistance
+            x: x - drawWidth / 2 - collisionGap / 2,
+            y: y - drawHeight / 2 - collisionGap / 2,
+            width: drawWidth + collisionGap,
+            height: drawHeight + collisionGap
           };
           const softOverlapAllowed = resolvedPlacement === "collage" && attempt > 36;
           const overlapIsOk = softOverlapAllowed || placedRects.every((placed) => !rectsOverlap(rect, placed));
@@ -1269,6 +1306,7 @@ export default function Home() {
       textBlockY,
       titleColor,
       topBadgeText,
+      topAssetCount,
       topClipartSize,
       topClipartVariation,
       topPanelEnabled,
@@ -1966,6 +2004,14 @@ export default function Home() {
               </label>
               <div className="twoColumn">
                 <label>
+                  使用する素材数
+                  <select value={topAssetCount} onChange={(event) => setTopAssetCount(event.target.value as TopAssetCount)}>
+                    {topAssetCountOptions.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </label>
+                <label>
                   素材密度
                   <select value={clipartDensity} onChange={(event) => setClipartDensity(event.target.value as ClipartDensity)}>
                     {densityOptions.map((option) => (
@@ -2054,7 +2100,11 @@ export default function Home() {
             ))}
           </div>
           <div className="previewMeta">
-            <span>{creationMode === "grid" ? `表示中：${currentPageAssets.length}枚` : `使用素材：${cliparts.length}枚`}</span>
+            <span>
+              {creationMode === "grid"
+                ? `表示中：${currentPageAssets.length}枚`
+                : `使用素材：${topPreviewAssetCount}枚 / ${cliparts.length}枚`}
+            </span>
             {creationMode === "top" ? <span>Etsyトップ画像向け</span> : null}
           </div>
           <div className="canvasFrame">
