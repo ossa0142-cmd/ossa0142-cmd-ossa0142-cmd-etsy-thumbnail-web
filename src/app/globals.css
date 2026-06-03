@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Baloo+2:wght@700;800&family=Caveat:wght@600;700&family=Cormorant+Garamond:wght@600;700&family=Dancing+Script:wght@600;700&family=Fredoka:wght@500;600;700&family=Great+Vibes&family=Indie+Flower&family=Nunito:wght@600;700;800;900&family=Pacifico&family=Patrick+Hand&family=Playfair+Display:wght@600;700;800&family=Quicksand:wght@600;700&family=Sacramento&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Baloo+2:wght@700;800&family=Bubblegum+Sans&family=Caveat:wght@600;700&family=Chewy&family=Cormorant+Garamond:wght@600;700&family=Dancing+Script:wght@600;700&family=Fredoka:wght@500;600;700&family=Great+Vibes&family=Indie+Flower&family=Nunito:wght@600;700;800;900&family=Pacifico&family=Patrick+Hand&family=Playfair+Display:wght@600;700;800&family=Quicksand:wght@600;700&family=Sacramento&display=swap");
 
 :root {
   color-scheme: light;
@@ -427,6 +427,17 @@ input[type="range"] {
   gap: 10px;
 }
 
+.exportSettings {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fffaf6;
+  padding: 10px;
+}
+
 .downloadGroup button {
   min-height: 48px;
   border: 0;
@@ -625,6 +636,7 @@ input[type="range"] {
   .twoColumn,
   .fontPreviewGrid,
   .currentPageDownloads,
+  .exportSettings,
   .downloadGroup {
     grid-template-columns: 1fr;
   }

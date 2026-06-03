@@ -11,7 +11,7 @@ import {
 } from "react";
 import type { CSSProperties } from "react";
 
-const CANVAS_SIZE = 3000;
+const DESIGN_SIZE = 3000;
 const PREVIEW_SIZE = 760;
 const DEFAULT_SUBTITLE = "COMMERCIAL LICENSE INCLUDED";
 
@@ -34,6 +34,8 @@ type FontKey =
   | "natural"
   | "vintage";
 type PaletteKey = "soft" | "vivid" | "natural";
+type ExportSize = 1000 | 2000 | 3000;
+type ExportFormat = "png" | "jpg";
 
 type Rgb = {
   r: number;
@@ -85,6 +87,17 @@ const layoutOptions: Array<{ label: string; value: LayoutOption }> = [
   { label: "5×4", value: "5x4" }
 ];
 
+const exportSizeOptions: Array<{ label: string; value: ExportSize }> = [
+  { label: "1000×1000px", value: 1000 },
+  { label: "2000×2000px", value: 2000 },
+  { label: "3000×3000px", value: 3000 }
+];
+
+const exportFormatOptions: Array<{ label: string; value: ExportFormat }> = [
+  { label: "PNG", value: "png" },
+  { label: "JPG", value: "jpg" }
+];
+
 const fontOptions: FontOption[] = [
   {
     key: "handwritten",
@@ -111,8 +124,8 @@ const fontOptions: FontOption[] = [
     key: "baby",
     label: "ベビー向け",
     sample: "Soft Baby Set",
-    stack: "'Quicksand', 'Nunito', 'Hiragino Maru Gothic ProN', sans-serif",
-    weight: 700
+    stack: "'Chewy', 'Bubblegum Sans', 'Fredoka', 'Baloo 2', 'Hiragino Maru Gothic ProN', cursive",
+    weight: 400
   },
   {
     key: "simple",
@@ -214,25 +227,25 @@ const presets: Preset[] = [
     key: "pastelNursery",
     label: "Pastel Nursery（パステル）",
     description: "淡い色・子ども部屋風",
-    fallback: ["#f5b8cf", "#a7d8d0", "#f6dd9a", "#b7c8f2"],
-    background: "#fffefe",
-    titleScale: 0.98,
-    subtitleScale: 0.88,
-    margin: 100,
-    textAreaBoost: 0.98,
+    fallback: ["#f8b9cc", "#bfe8dc", "#f7e5aa", "#b9d9f6", "#e8d7ff"],
+    background: "#fffaf6",
+    titleScale: 0.94,
+    subtitleScale: 0.84,
+    margin: 118,
+    textAreaBoost: 1.08,
     defaultTitleFont: "cute",
-    defaultSubtitleFont: "handwritten"
+    defaultSubtitleFont: "baby"
   },
   {
     key: "boldKidsParty",
     label: "Bold Kids Party（ポップ）",
     description: "明るく目立つキッズ向け",
-    fallback: ["#ef476f", "#ffd166", "#06d6a0", "#118ab2"],
-    background: "#ffffff",
-    titleScale: 1.08,
-    subtitleScale: 0.96,
-    margin: 86,
-    textAreaBoost: 0.92,
+    fallback: ["#ff2f6d", "#ffbd00", "#00c77b", "#1687ff", "#8b3ffc"],
+    background: "#fffefe",
+    titleScale: 1.16,
+    subtitleScale: 1,
+    margin: 72,
+    textAreaBoost: 0.86,
     defaultTitleFont: "bold",
     defaultSubtitleFont: "cute"
   }
@@ -310,6 +323,18 @@ async function ensureCanvasFonts(fonts: FontOption[]) {
     fonts.map((font) => document.fonts.load(`${font.weight} 180px ${font.stack}`))
   );
   await document.fonts.ready;
+}
+
+function prepareCanvas(canvas: HTMLCanvasElement, size: number) {
+  canvas.width = size;
+  canvas.height = size;
+  const context = canvas.getContext("2d");
+  if (!context) return null;
+
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = "high";
+  context.setTransform(size / DESIGN_SIZE, 0, 0, size / DESIGN_SIZE, 0, 0);
+  return context;
 }
 
 function dedupePalette(colors: Rgb[], fallback: Rgb[]) {
@@ -549,11 +574,11 @@ function drawWrappedText(
   });
 }
 
-function downloadCanvas(canvas: HTMLCanvasElement, title: string, suffix: string) {
+function downloadCanvas(canvas: HTMLCanvasElement, title: string, suffix: string, format: ExportFormat) {
   const fileTitle = title.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
   const link = document.createElement("a");
-  link.download = `${fileTitle || "etsy-thumbnail"}-${suffix}.png`;
-  link.href = canvas.toDataURL("image/png");
+  link.download = `${fileTitle || "etsy-thumbnail"}-${suffix}.${format}`;
+  link.href = canvas.toDataURL(format === "jpg" ? "image/jpeg" : "image/png", 0.94);
   link.click();
 }
 
@@ -568,6 +593,8 @@ export default function Home() {
   const [titleFontKey, setTitleFontKey] = useState<FontKey>("baby");
   const [subtitleFontKey, setSubtitleFontKey] = useState<FontKey>("handwritten");
   const [paletteKey, setPaletteKey] = useState<PaletteKey>("soft");
+  const [exportSize, setExportSize] = useState<ExportSize>(3000);
+  const [exportFormat, setExportFormat] = useState<ExportFormat>("png");
   const [layout, setLayout] = useState<LayoutOption>("auto");
   const [selectedPage, setSelectedPage] = useState(0);
   const [clipartSize, setClipartSize] = useState(98);
@@ -646,28 +673,38 @@ export default function Home() {
   }, [subtitleFont, titleFont]);
 
   const renderThumbnail = useCallback(
-    (options: { withText: boolean; pageIndex?: number; targetCanvas?: HTMLCanvasElement } = { withText: true }) => {
+    (
+      options: {
+        withText: boolean;
+        pageIndex?: number;
+        targetCanvas?: HTMLCanvasElement;
+        outputSize?: number;
+      } = { withText: true }
+    ) => {
       const canvas = options.targetCanvas ?? renderCanvasRef.current;
       if (!canvas) return;
 
-      const context = canvas.getContext("2d");
+      const outputSize = options.outputSize ?? DESIGN_SIZE;
+      const context = prepareCanvas(canvas, outputSize);
       if (!context) return;
 
       const withText = options.withText;
       const pageIndex = options.pageIndex ?? selectedPage;
       const pageAssets = cliparts.slice(pageIndex * pageSize, pageIndex * pageSize + pageSize);
 
-      context.clearRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+      context.clearRect(0, 0, DESIGN_SIZE, DESIGN_SIZE);
+      context.fillStyle = "#ffffff";
+      context.fillRect(0, 0, DESIGN_SIZE, DESIGN_SIZE);
       context.fillStyle = activePreset.background;
-      context.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+      context.fillRect(0, 0, DESIGN_SIZE, DESIGN_SIZE);
 
       const margin = withText ? activePreset.margin : 70;
       const topAreaHeight = withText
-        ? Math.round((topTitleArea / 100) * CANVAS_SIZE * activePreset.textAreaBoost)
-        : Math.round(CANVAS_SIZE * 0.055);
+        ? Math.round((topTitleArea / 100) * DESIGN_SIZE * activePreset.textAreaBoost)
+        : Math.round(DESIGN_SIZE * 0.055);
       const gridTop = withText ? Math.max(topAreaHeight + 8, 520) : 95;
-      const gridBottom = withText ? CANVAS_SIZE - 90 : CANVAS_SIZE - 70;
-      const gridWidth = CANVAS_SIZE - margin * 2;
+      const gridBottom = withText ? DESIGN_SIZE - 90 : DESIGN_SIZE - 70;
+      const gridWidth = DESIGN_SIZE - margin * 2;
       const gridHeight = gridBottom - gridTop;
       const columnGap = horizontalSpacing * (withText ? 7 : 3.5);
       const rowGap = verticalSpacing * (withText ? 7 : 3.5);
@@ -679,7 +716,7 @@ export default function Home() {
       context.textBaseline = "middle";
 
       if (withText) {
-        const maxTextWidth = CANVAS_SIZE - margin * 2;
+        const maxTextWidth = DESIGN_SIZE - margin * 2;
         const titleSize = fitFontSize(
           context,
           title,
@@ -688,7 +725,7 @@ export default function Home() {
           58,
           maxTextWidth
         );
-        const safeTitleX = clamp(CANVAS_SIZE / 2 + titleX * 10, margin, CANVAS_SIZE - margin);
+        const safeTitleX = clamp(DESIGN_SIZE / 2 + titleX * 10, margin, DESIGN_SIZE - margin);
         const safeTitleY = clamp(titleY, 75, Math.max(120, topAreaHeight - 110));
 
         context.font = `${titleFont.weight} ${titleSize}px ${titleFont.stack}`;
@@ -703,7 +740,7 @@ export default function Home() {
           30,
           maxTextWidth
         );
-        const safeSubtitleX = clamp(CANVAS_SIZE / 2 + subtitleX * 10, margin, CANVAS_SIZE - margin);
+        const safeSubtitleX = clamp(DESIGN_SIZE / 2 + subtitleX * 10, margin, DESIGN_SIZE - margin);
         const preferredSubtitleY = Math.max(subtitleY, safeTitleY + titleSize * 0.48 + textGap);
         const safeSubtitleY = clamp(preferredSubtitleY, safeTitleY + 56, Math.max(safeTitleY + 64, topAreaHeight - 34));
 
@@ -732,6 +769,9 @@ export default function Home() {
       if (preview && !options.targetCanvas) {
         const previewContext = preview.getContext("2d");
         if (!previewContext) return;
+        previewContext.imageSmoothingEnabled = true;
+        previewContext.imageSmoothingQuality = "high";
+        previewContext.setTransform(1, 0, 0, 1, 0, 0);
         previewContext.clearRect(0, 0, PREVIEW_SIZE, PREVIEW_SIZE);
         previewContext.drawImage(canvas, 0, 0, PREVIEW_SIZE, PREVIEW_SIZE);
       }
@@ -819,8 +859,13 @@ export default function Home() {
     const canvas = renderCanvasRef.current;
     if (!canvas) return;
     await ensureCanvasFonts([titleFont, subtitleFont]);
-    renderThumbnail({ withText, pageIndex });
-    downloadCanvas(canvas, title, `${withText ? "text" : "no-text"}-page-${pageIndex + 1}`);
+    renderThumbnail({ withText, pageIndex, outputSize: exportSize });
+    downloadCanvas(
+      canvas,
+      title,
+      `${withText ? "text" : "no-text"}-${exportSize}px-page-${pageIndex + 1}`,
+      exportFormat
+    );
     renderThumbnail({ withText: true });
   }
 
@@ -834,8 +879,8 @@ export default function Home() {
     <main className="appShell" style={appThemeStyle}>
       <section className="heroBar">
         <div>
-          <p className="eyebrow">日本語 Etsy サムネイル作成ツール</p>
-          <h1>クリップアート素材を大きく見せるサムネイル生成</h1>
+          <p className="eyebrow">日本語 Etsy セラー向けサムネイル作成ツール</p>
+          <h1>Clipart Thumbnail Maker</h1>
         </div>
         <div className="presetStatus">
           <span>選択中プリセット</span>
@@ -1089,17 +1134,39 @@ export default function Home() {
           </section>
 
           <section className="downloadGroup">
+            <div className="exportSettings">
+              <label>
+                保存サイズ
+                <select value={exportSize} onChange={(event) => setExportSize(Number(event.target.value) as ExportSize)}>
+                  {exportSizeOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                保存形式
+                <select value={exportFormat} onChange={(event) => setExportFormat(event.target.value as ExportFormat)}>
+                  {exportFormatOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
             <button type="button" onClick={() => handleDownload(true)}>
-              文字あり版をダウンロード
+              現在のページを文字ありで保存
             </button>
             <button type="button" onClick={() => handleDownload(false)}>
-              文字なし版をダウンロード
+              現在のページを文字なしで保存
             </button>
             <button type="button" onClick={() => handleDownloadAll(true)}>
-              全ページ文字あり版
+              全ページを文字ありで保存
             </button>
             <button type="button" onClick={() => handleDownloadAll(false)}>
-              全ページ文字なし版
+              全ページを文字なしで保存
             </button>
           </section>
         </aside>
@@ -1107,7 +1174,7 @@ export default function Home() {
         <section className="previewPanel" aria-label="サムネイルプレビュー">
           <div className="previewHeader">
             <div>
-              <p>3000 × 3000 px</p>
+              <p>{exportSize} × {exportSize} px / {exportFormat.toUpperCase()}</p>
               <h2>サムネイルプレビュー</h2>
             </div>
             <span>
@@ -1152,16 +1219,16 @@ export default function Home() {
           </div>
           <div className="currentPageDownloads">
             <button type="button" onClick={() => handleDownload(true)}>
-              現在のページをダウンロード
+              現在のページを文字ありで保存
             </button>
             <button type="button" onClick={() => handleDownload(false)}>
-              現在のページを文字なしでダウンロード
+              現在のページを文字なしで保存
             </button>
           </div>
         </section>
       </section>
 
-      <canvas className="hiddenCanvas" ref={renderCanvasRef} width={CANVAS_SIZE} height={CANVAS_SIZE} />
+      <canvas className="hiddenCanvas" ref={renderCanvasRef} width={DESIGN_SIZE} height={DESIGN_SIZE} />
     </main>
   );
 }
