@@ -1,3 +1,5 @@
+@import url("https://fonts.googleapis.com/css2?family=Baloo+2:wght@700;800&family=Caveat:wght@600;700&family=Cormorant+Garamond:wght@600;700&family=Dancing+Script:wght@600;700&family=Fredoka:wght@500;600;700&family=Great+Vibes&family=Indie+Flower&family=Nunito:wght@600;700;800;900&family=Pacifico&family=Patrick+Hand&family=Playfair+Display:wght@600;700;800&family=Quicksand:wght@600;700&family=Sacramento&display=swap");
+
 :root {
   color-scheme: light;
   --ink: #171514;
@@ -265,13 +267,52 @@ button:focus-visible {
   font-weight: 900;
 }
 
+.paletteOptions {
+  display: grid;
+  gap: 8px;
+}
+
+.paletteCard {
+  display: grid;
+  gap: 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--ink);
+  cursor: pointer;
+  padding: 10px;
+  text-align: left;
+}
+
+.paletteCard.active,
+.paletteCard:hover {
+  border-color: var(--accent);
+  background: #fff8f1;
+}
+
+.paletteCard b {
+  font-size: 14px;
+}
+
+.paletteCard small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.paletteCard em {
+  color: var(--accent-dark);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 900;
+}
+
 .colorStrip {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 8px;
 }
 
-.colorStrip span {
+.colorStrip i {
   min-height: 36px;
   border: 1px solid rgba(0, 0, 0, 0.12);
   border-radius: 6px;
@@ -407,6 +448,11 @@ input[type="range"] {
 .previewPanel {
   min-width: 0;
   padding: 16px;
+  position: sticky;
+  top: 16px;
+  align-self: start;
+  max-height: calc(100vh - 32px);
+  overflow: auto;
 }
 
 .previewHeader {
@@ -544,6 +590,9 @@ input[type="range"] {
 
   .previewPanel {
     order: -1;
+    position: static;
+    max-height: none;
+    overflow: visible;
   }
 }
 

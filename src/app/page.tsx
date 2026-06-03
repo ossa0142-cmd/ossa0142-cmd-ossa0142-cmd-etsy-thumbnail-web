@@ -9,6 +9,7 @@ import {
   useRef,
   useState
 } from "react";
+import type { CSSProperties } from "react";
 
 const CANVAS_SIZE = 3000;
 const PREVIEW_SIZE = 760;
@@ -27,10 +28,12 @@ type FontKey =
   | "handwritten"
   | "script"
   | "cute"
+  | "baby"
   | "simple"
   | "bold"
   | "natural"
   | "vintage";
+type PaletteKey = "soft" | "vivid" | "natural";
 
 type Rgb = {
   r: number;
@@ -87,49 +90,56 @@ const fontOptions: FontOption[] = [
     key: "handwritten",
     label: "手書き風",
     sample: "Handmade Clipart",
-    stack: "'Comic Sans MS', 'Hiragino Maru Gothic ProN', 'Yu Gothic', cursive",
-    weight: 800
+    stack: "'Caveat', 'Patrick Hand', 'Indie Flower', 'Pacifico', 'Hiragino Maru Gothic ProN', cursive",
+    weight: 700
   },
   {
     key: "script",
     label: "筆記体",
     sample: "Elegant Bundle",
-    stack: "Georgia, 'Times New Roman', 'Yu Mincho', serif",
-    weight: 700
+    stack: "'Great Vibes', 'Sacramento', 'Dancing Script', cursive",
+    weight: 400
   },
   {
     key: "cute",
     label: "かわいい",
     sample: "Cute Nursery",
-    stack: "'Arial Rounded MT Bold', 'Hiragino Maru Gothic ProN', 'Yu Gothic', sans-serif",
-    weight: 900
+    stack: "'Fredoka', 'Baloo 2', 'Nunito', 'Hiragino Maru Gothic ProN', sans-serif",
+    weight: 700
+  },
+  {
+    key: "baby",
+    label: "ベビー向け",
+    sample: "Soft Baby Set",
+    stack: "'Quicksand', 'Nunito', 'Hiragino Maru Gothic ProN', sans-serif",
+    weight: 700
   },
   {
     key: "simple",
     label: "シンプル",
     sample: "Minimal Clipart",
-    stack: "'Helvetica Neue', Arial, 'Yu Gothic', sans-serif",
+    stack: "'Quicksand', 'Helvetica Neue', Arial, 'Yu Gothic', sans-serif",
     weight: 700
   },
   {
     key: "bold",
     label: "太字",
     sample: "Bold Kids Party",
-    stack: "'Arial Black', Impact, 'Yu Gothic', sans-serif",
+    stack: "'Baloo 2', 'Fredoka', 'Arial Black', Impact, sans-serif",
     weight: 900
   },
   {
     key: "natural",
     label: "ナチュラル",
     sample: "Natural Art Set",
-    stack: "Trebuchet MS, 'Hiragino Kaku Gothic ProN', 'Yu Gothic', sans-serif",
+    stack: "'Nunito', 'Quicksand', 'Hiragino Kaku Gothic ProN', sans-serif",
     weight: 800
   },
   {
     key: "vintage",
     label: "ヴィンテージ",
     sample: "Vintage Gouache",
-    stack: "Georgia, Garamond, 'Yu Mincho', serif",
+    stack: "'Playfair Display', 'Cormorant Garamond', Georgia, 'Yu Mincho', serif",
     weight: 800
   }
 ];
@@ -145,8 +155,8 @@ const presets: Preset[] = [
     subtitleScale: 0.9,
     margin: 110,
     textAreaBoost: 1,
-    defaultTitleFont: "cute",
-    defaultSubtitleFont: "natural"
+    defaultTitleFont: "baby",
+    defaultSubtitleFont: "handwritten"
   },
   {
     key: "vintageGouache",
@@ -185,7 +195,7 @@ const presets: Preset[] = [
     margin: 110,
     textAreaBoost: 1,
     defaultTitleFont: "vintage",
-    defaultSubtitleFont: "natural"
+    defaultSubtitleFont: "script"
   },
   {
     key: "minimalLineArt",
@@ -258,6 +268,20 @@ function mix(color: Rgb, target: Rgb, amount: number): Rgb {
   };
 }
 
+function saturation(color: Rgb) {
+  const max = Math.max(color.r, color.g, color.b);
+  const min = Math.min(color.r, color.g, color.b);
+  return max === 0 ? 0 : (max - min) / max;
+}
+
+function brightness(color: Rgb) {
+  return (color.r + color.g + color.b) / 3;
+}
+
+function warmScore(color: Rgb) {
+  return color.r * 0.52 + color.g * 0.34 - color.b * 0.28;
+}
+
 function isNeutralColor(r: number, g: number, b: number) {
   const max = Math.max(r, g, b);
   const min = Math.min(r, g, b);
@@ -277,6 +301,72 @@ function clamp(value: number, min: number, max: number) {
 
 function getFont(key: FontKey) {
   return fontOptions.find((font) => font.key === key) ?? fontOptions[2];
+}
+
+function dedupePalette(colors: Rgb[], fallback: Rgb[]) {
+  const selected: Rgb[] = [];
+  const candidates = [...colors, ...fallback];
+
+  for (const color of candidates) {
+    if (selected.every((existing) => colorDistance(existing, color) > 36)) {
+      selected.push(color);
+    }
+    if (selected.length === 5) break;
+  }
+
+  return selected;
+}
+
+function makePaletteOptions(extractedColors: Rgb[], fallbackColors: Rgb[]) {
+  const baseColors = extractedColors.length > 0 ? extractedColors : fallbackColors;
+  const white = hexToRgb("#ffffff");
+  const beige = hexToRgb("#ead7bf");
+  const brown = hexToRgb("#7f5d45");
+
+  const soft = dedupePalette(
+    baseColors
+      .slice()
+      .sort((a, b) => brightness(b) - brightness(a))
+      .map((color) => mix(color, white, 0.48)),
+    fallbackColors.map((color) => mix(color, white, 0.45))
+  );
+
+  const vivid = dedupePalette(
+    baseColors
+      .slice()
+      .sort((a, b) => saturation(b) - saturation(a) || brightness(a) - brightness(b))
+      .map((color) => mix(color, saturation(color) > 0.45 ? color : brown, 0.08)),
+    fallbackColors
+  );
+
+  const natural = dedupePalette(
+    baseColors
+      .slice()
+      .sort((a, b) => warmScore(b) - warmScore(a))
+      .map((color) => mix(mix(color, beige, 0.36), brown, 0.08)),
+    fallbackColors.map((color) => mix(color, beige, 0.34))
+  );
+
+  return [
+    {
+      key: "soft" as const,
+      label: "やわらかカラー",
+      description: "ベビー・水彩・ナーサリー向け",
+      colors: soft
+    },
+    {
+      key: "vivid" as const,
+      label: "くっきりカラー",
+      description: "ハロウィン・キッズ・ポップ向け",
+      colors: vivid
+    },
+    {
+      key: "natural" as const,
+      label: "ナチュラルカラー",
+      description: "ヴィンテージ・ガッシュ・自然素材向け",
+      colors: natural
+    }
+  ];
 }
 
 function extractColorsFromCanvas(canvas: HTMLCanvasElement, maxColors = 5): Rgb[] {
@@ -466,8 +556,9 @@ export default function Home() {
   const [title, setTitle] = useState("Watercolor Baby Clipart");
   const [subtitle, setSubtitle] = useState(DEFAULT_SUBTITLE);
   const [presetKey, setPresetKey] = useState<PresetKey>("watercolorBaby");
-  const [titleFontKey, setTitleFontKey] = useState<FontKey>("cute");
-  const [subtitleFontKey, setSubtitleFontKey] = useState<FontKey>("natural");
+  const [titleFontKey, setTitleFontKey] = useState<FontKey>("baby");
+  const [subtitleFontKey, setSubtitleFontKey] = useState<FontKey>("handwritten");
+  const [paletteKey, setPaletteKey] = useState<PaletteKey>("soft");
   const [layout, setLayout] = useState<LayoutOption>("auto");
   const [selectedPage, setSelectedPage] = useState(0);
   const [clipartSize, setClipartSize] = useState(98);
@@ -509,21 +600,19 @@ export default function Home() {
     }
     return palette;
   }, [cliparts]);
-  const palette = useMemo(() => {
-    const colors: Rgb[] = [];
-    const candidates = [...extractedColors, ...activePreset.fallback.map(hexToRgb)];
-
-    for (const color of candidates) {
-      if (colors.every((existing) => colorDistance(existing, color) > 42)) {
-        colors.push(color);
-      }
-      if (colors.length === 5) break;
-    }
-
-    return colors;
-  }, [activePreset.fallback, extractedColors]);
+  const paletteOptions = useMemo(
+    () => makePaletteOptions(extractedColors, activePreset.fallback.map(hexToRgb)),
+    [activePreset.fallback, extractedColors]
+  );
+  const palette = paletteOptions.find((option) => option.key === paletteKey)?.colors ?? paletteOptions[0].colors;
   const titleColor = palette[0] ?? hexToRgb("#222222");
   const subtitleColor = palette[1] ?? mix(titleColor, hexToRgb("#ffffff"), 0.35);
+  const accentColor = palette[2] ?? mix(titleColor, hexToRgb("#ffffff"), 0.25);
+  const appThemeStyle = {
+    "--accent": rgbToHex(accentColor),
+    "--accent-dark": rgbToHex(mix(accentColor, hexToRgb("#171514"), 0.32)),
+    "--soft": rgbToHex(mix(accentColor, hexToRgb("#ffffff"), 0.88))
+  } as CSSProperties;
 
   useEffect(() => {
     setTitleFontKey(activePreset.defaultTitleFont);
@@ -718,7 +807,7 @@ export default function Home() {
   }
 
   return (
-    <main className="appShell">
+    <main className="appShell" style={appThemeStyle}>
       <section className="heroBar">
         <div>
           <p className="eyebrow">日本語 Etsy サムネイル作成ツール</p>
@@ -775,15 +864,33 @@ export default function Home() {
           <section className="controlGroup">
             <div className="sectionTitle">
               <span>2</span>
-              <h2>抽出カラー</h2>
+              <h2>カラーパレット</h2>
             </div>
-            <div className="colorStrip">
-              {palette.map((color) => (
-                <span key={rgbToHex(color)} style={{ backgroundColor: rgbToHex(color) }} title={rgbToHex(color)} />
+            <div className="paletteOptions">
+              {paletteOptions.map((option) => (
+                <button
+                  className={paletteKey === option.key ? "paletteCard active" : "paletteCard"}
+                  key={option.key}
+                  type="button"
+                  onClick={() => setPaletteKey(option.key)}
+                >
+                  <b>{option.label}</b>
+                  <small>{option.description}</small>
+                  <span className="colorStrip">
+                    {option.colors.map((color, index) => (
+                      <i
+                        key={`${option.key}-${rgbToHex(color)}-${index}`}
+                        style={{ backgroundColor: rgbToHex(color) }}
+                        title={rgbToHex(color)}
+                      />
+                    ))}
+                  </span>
+                  <em>このカラーを使う</em>
+                </button>
               ))}
             </div>
             <p className="helperText">
-              透明部分を無視し、白・黒・グレーをなるべく除外してメインカラーを自動抽出します。
+              透明部分を無視し、白・黒・グレーをなるべく除外して3種類のパレットを自動生成します。
             </p>
           </section>
 
