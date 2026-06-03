@@ -303,6 +303,15 @@ function getFont(key: FontKey) {
   return fontOptions.find((font) => font.key === key) ?? fontOptions[2];
 }
 
+async function ensureCanvasFonts(fonts: FontOption[]) {
+  if (typeof document === "undefined" || !("fonts" in document)) return;
+
+  await Promise.all(
+    fonts.map((font) => document.fonts.load(`${font.weight} 180px ${font.stack}`))
+  );
+  await document.fonts.ready;
+}
+
 function dedupePalette(colors: Rgb[], fallback: Rgb[]) {
   const selected: Rgb[] = [];
   const candidates = [...colors, ...fallback];
@@ -573,6 +582,7 @@ export default function Home() {
   const [subtitleFontSize, setSubtitleFontSize] = useState(66);
   const [textGap, setTextGap] = useState(78);
   const [isDragging, setIsDragging] = useState(false);
+  const [fontLoadTick, setFontLoadTick] = useState(0);
   const [error, setError] = useState("");
 
   const activePreset = useMemo(
@@ -622,6 +632,18 @@ export default function Home() {
   useEffect(() => {
     setSelectedPage((page) => clamp(page, 0, pageCount - 1));
   }, [pageCount]);
+
+  useEffect(() => {
+    let isActive = true;
+
+    void ensureCanvasFonts([titleFont, subtitleFont]).then(() => {
+      if (isActive) setFontLoadTick((tick) => tick + 1);
+    });
+
+    return () => {
+      isActive = false;
+    };
+  }, [subtitleFont, titleFont]);
 
   const renderThumbnail = useCallback(
     (options: { withText: boolean; pageIndex?: number; targetCanvas?: HTMLCanvasElement } = { withText: true }) => {
@@ -721,6 +743,7 @@ export default function Home() {
       clipartSize,
       cliparts,
       horizontalSpacing,
+      fontLoadTick,
       pageSize,
       selectedPage,
       subtitle,
@@ -792,9 +815,10 @@ export default function Home() {
     void addFiles(event.dataTransfer.files);
   }
 
-  function handleDownload(withText: boolean, pageIndex = selectedPage) {
+  async function handleDownload(withText: boolean, pageIndex = selectedPage) {
     const canvas = renderCanvasRef.current;
     if (!canvas) return;
+    await ensureCanvasFonts([titleFont, subtitleFont]);
     renderThumbnail({ withText, pageIndex });
     downloadCanvas(canvas, title, `${withText ? "text" : "no-text"}-page-${pageIndex + 1}`);
     renderThumbnail({ withText: true });
@@ -802,7 +826,7 @@ export default function Home() {
 
   function handleDownloadAll(withText: boolean) {
     for (let pageIndex = 0; pageIndex < pageCount; pageIndex += 1) {
-      window.setTimeout(() => handleDownload(withText, pageIndex), pageIndex * 250);
+      window.setTimeout(() => void handleDownload(withText, pageIndex), pageIndex * 300);
     }
   }
 

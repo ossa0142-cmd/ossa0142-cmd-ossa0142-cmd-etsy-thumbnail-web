@@ -98,6 +98,8 @@ h2 {
   display: grid;
   grid-template-columns: minmax(360px, 500px) minmax(0, 1fr);
   gap: 18px;
+  align-items: start;
+  min-height: calc(100vh - 104px);
 }
 
 .controls,
@@ -112,6 +114,9 @@ h2 {
   flex-direction: column;
   gap: 12px;
   padding: 16px;
+  max-height: calc(100vh - 112px);
+  overflow: auto;
+  scrollbar-gutter: stable;
 }
 
 .controlGroup {
@@ -449,9 +454,9 @@ input[type="range"] {
   min-width: 0;
   padding: 16px;
   position: sticky;
-  top: 16px;
+  top: 24px;
   align-self: start;
-  max-height: calc(100vh - 32px);
+  max-height: calc(100vh - 48px);
   overflow: auto;
 }
 
@@ -586,6 +591,12 @@ input[type="range"] {
 
   .workspace {
     grid-template-columns: 1fr;
+    min-height: 0;
+  }
+
+  .controls {
+    max-height: none;
+    overflow: visible;
   }
 
   .previewPanel {
