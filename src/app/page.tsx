@@ -39,8 +39,9 @@ type ExportFormat = "png" | "jpg";
 type CreationMode = "grid" | "top";
 type AssetSource = "new" | "uploaded";
 type TopStyle = "centerText" | "fullCollage" | "cleanSpace" | "playfulPop";
-type PanelShape = "rectangle" | "rounded" | "scallop";
+type PanelShape = "square" | "circle";
 type ClipartDensity = "low" | "normal" | "high";
+type ClipartPlacement = "circle" | "corners" | "topBottom" | "random" | "aligned";
 
 type Rgb = {
   r: number;
@@ -111,15 +112,22 @@ const topStyleOptions: Array<{ label: string; value: TopStyle; description: stri
 ];
 
 const panelShapeOptions: Array<{ label: string; value: PanelShape }> = [
-  { label: "rectangle", value: "rectangle" },
-  { label: "rounded rectangle", value: "rounded" },
-  { label: "scallop style", value: "scallop" }
+  { label: "四角", value: "square" },
+  { label: "円", value: "circle" }
 ];
 
 const densityOptions: Array<{ label: string; value: ClipartDensity }> = [
   { label: "少なめ", value: "low" },
   { label: "普通", value: "normal" },
   { label: "多め", value: "high" }
+];
+
+const placementOptions: Array<{ label: string; value: ClipartPlacement }> = [
+  { label: "円形配置", value: "circle" },
+  { label: "四隅配置", value: "corners" },
+  { label: "上下配置", value: "topBottom" },
+  { label: "ランダム配置", value: "random" },
+  { label: "整列配置", value: "aligned" }
 ];
 
 const fontOptions: FontOption[] = [
@@ -622,27 +630,29 @@ function drawPanel(
   context.strokeStyle = stroke;
   context.lineWidth = 8;
 
-  if (shape === "scallop") {
-    const radius = 46;
+  if (shape === "circle") {
     context.beginPath();
-    context.roundRect(x, y, width, height, 92);
+    context.ellipse(x + width / 2, y + height / 2, width / 2, height / 2, 0, 0, Math.PI * 2);
     context.fill();
-    for (let dotX = x + radius; dotX < x + width; dotX += radius * 1.55) {
-      context.beginPath();
-      context.arc(dotX, y, radius, 0, Math.PI * 2);
-      context.fill();
-      context.beginPath();
-      context.arc(dotX, y + height, radius, 0, Math.PI * 2);
-      context.fill();
-    }
-    context.strokeRect(x + 26, y + 26, width - 52, height - 52);
+    context.stroke();
     return;
   }
 
   context.beginPath();
-  context.roundRect(x, y, width, height, shape === "rounded" ? 92 : 12);
+  context.roundRect(x, y, width, height, 48);
   context.fill();
   context.stroke();
+}
+
+type Rect = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+function rectsOverlap(a: Rect, b: Rect) {
+  return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
 }
 
 function downloadCanvas(canvas: HTMLCanvasElement, title: string, suffix: string, format: ExportFormat) {
@@ -670,7 +680,30 @@ export default function Home() {
   const [topTitleFontKey, setTopTitleFontKey] = useState<FontKey>("bold");
   const [topSubtitleFontKey, setTopSubtitleFontKey] = useState<FontKey>("cute");
   const [topPanelEnabled, setTopPanelEnabled] = useState(true);
-  const [topPanelShape, setTopPanelShape] = useState<PanelShape>("rounded");
+  const [topPanelShape, setTopPanelShape] = useState<PanelShape>("square");
+  const [frameWidth, setFrameWidth] = useState(1700);
+  const [frameHeight, setFrameHeight] = useState(760);
+  const [frameRadius, setFrameRadius] = useState(96);
+  const [textBlockX, setTextBlockX] = useState(0);
+  const [textBlockY, setTextBlockY] = useState(0);
+  const [textBlockWidth, setTextBlockWidth] = useState(1700);
+  const [textBlockHeight, setTextBlockHeight] = useState(760);
+  const [topTitleSize, setTopTitleSize] = useState(210);
+  const [topTitleY, setTopTitleY] = useState(-145);
+  const [topTitleX, setTopTitleX] = useState(0);
+  const [topTitleLineHeight, setTopTitleLineHeight] = useState(102);
+  const [topSubtitleSize, setTopSubtitleSize] = useState(82);
+  const [topSubtitleY, setTopSubtitleY] = useState(135);
+  const [topSubtitleX, setTopSubtitleX] = useState(0);
+  const [topSubtitleLineHeight, setTopSubtitleLineHeight] = useState(110);
+  const [showTopSmallText, setShowTopSmallText] = useState(true);
+  const [topSmallTextSize, setTopSmallTextSize] = useState(54);
+  const [topSmallTextY, setTopSmallTextY] = useState(250);
+  const [topSmallTextX, setTopSmallTextX] = useState(0);
+  const [clipartPlacement, setClipartPlacement] = useState<ClipartPlacement>("circle");
+  const [topClipartSize, setTopClipartSize] = useState(500);
+  const [topClipartVariation, setTopClipartVariation] = useState(45);
+  const [clipartDistance, setClipartDistance] = useState(70);
   const [clipartDensity, setClipartDensity] = useState<ClipartDensity>("normal");
   const [topSeed, setTopSeed] = useState(20260603);
   const [presetKey, setPresetKey] = useState<PresetKey>("watercolorBaby");
@@ -905,6 +938,22 @@ export default function Home() {
       const assets = sourceAssets.slice(0, Math.max(1, Math.min(sourceAssets.length, densityCount)));
       const panelFill = `rgba(255, 255, 255, ${topStyle === "fullCollage" ? 0.9 : 0.82})`;
       const panelStroke = rgbToHex(mix(accentColor, hexToRgb("#ffffff"), 0.35));
+      const blockCenterX = DESIGN_SIZE / 2 + textBlockX * 10;
+      const blockCenterY = DESIGN_SIZE / 2 + textBlockY * 10;
+      const blockWidth = textBlockWidth;
+      const blockHeight = textBlockHeight;
+      const blockX = blockCenterX - blockWidth / 2;
+      const blockY = blockCenterY - blockHeight / 2;
+      const frameW = frameWidth;
+      const frameH = frameHeight;
+      const frameX = blockCenterX - frameW / 2;
+      const frameY = blockCenterY - frameH / 2;
+      const safeArea: Rect = {
+        x: Math.min(blockX, frameX) - clipartDistance,
+        y: Math.min(blockY, frameY) - clipartDistance,
+        width: Math.max(blockX + blockWidth, frameX + frameW) - Math.min(blockX, frameX) + clipartDistance * 2,
+        height: Math.max(blockY + blockHeight, frameY + frameH) - Math.min(blockY, frameY) + clipartDistance * 2
+      };
 
       context.clearRect(0, 0, DESIGN_SIZE, DESIGN_SIZE);
       context.fillStyle = "#ffffff";
@@ -919,47 +968,84 @@ export default function Home() {
         context.fillText("PNG素材をアップロードしてください", DESIGN_SIZE / 2, DESIGN_SIZE / 2);
       }
 
+      const placedRects: Rect[] = [];
+
       assets.forEach((clipart, index) => {
-        const angle = random() * Math.PI * 2;
-        const styleBoost = topStyle === "playfulPop" ? 1.25 : topStyle === "cleanSpace" ? 0.82 : 1;
-        const baseSize = (topStyle === "fullCollage" ? 620 : 500) * styleBoost * (0.78 + random() * 0.55);
-        let x = DESIGN_SIZE / 2;
-        let y = DESIGN_SIZE / 2;
-
-        if (topStyle === "centerText") {
-          const radius = 1050 + random() * 330;
-          x = DESIGN_SIZE / 2 + Math.cos(angle) * radius;
-          y = DESIGN_SIZE / 2 + Math.sin(angle) * radius;
-        } else if (topStyle === "fullCollage") {
-          x = 180 + random() * (DESIGN_SIZE - 360);
-          y = 180 + random() * (DESIGN_SIZE - 360);
-        } else if (topStyle === "cleanSpace") {
-          const corner = index % 4;
-          x = corner < 2 ? 340 + random() * 520 : DESIGN_SIZE - 340 - random() * 520;
-          y = corner === 0 || corner === 2 ? 330 + random() * 480 : DESIGN_SIZE - 330 - random() * 480;
-        } else {
-          const radius = 780 + random() * 720;
-          x = DESIGN_SIZE / 2 + Math.cos(angle) * radius;
-          y = DESIGN_SIZE / 2 + Math.sin(angle) * radius;
-        }
-
+        const styleBoost = topStyle === "playfulPop" ? 1.18 : topStyle === "cleanSpace" ? 0.82 : 1;
+        const variation = 1 - topClipartVariation / 200 + random() * (topClipartVariation / 100);
+        const baseSize = topClipartSize * styleBoost * variation;
         const ratio = Math.min(baseSize / clipart.trimmedWidth, baseSize / clipart.trimmedHeight);
         const drawWidth = clipart.trimmedWidth * ratio;
         const drawHeight = clipart.trimmedHeight * ratio;
+        let chosen: { x: number; y: number } | null = null;
+
+        for (let attempt = 0; attempt < 90; attempt += 1) {
+          const angle = clipartPlacement === "random" ? random() * Math.PI * 2 : (Math.PI * 2 * index) / Math.max(1, assets.length);
+          let x = DESIGN_SIZE / 2;
+          let y = DESIGN_SIZE / 2;
+
+          if (clipartPlacement === "circle") {
+            const radius = Math.max(frameW, frameH) * 0.62 + clipartDistance + random() * 260;
+            x = blockCenterX + Math.cos(angle + attempt * 0.13) * radius;
+            y = blockCenterY + Math.sin(angle + attempt * 0.13) * radius;
+          } else if (clipartPlacement === "corners") {
+            const corner = (index + attempt) % 4;
+            x = corner < 2 ? 250 + random() * 720 : DESIGN_SIZE - 250 - random() * 720;
+            y = corner === 0 || corner === 2 ? 250 + random() * 720 : DESIGN_SIZE - 250 - random() * 720;
+          } else if (clipartPlacement === "topBottom") {
+            x = 240 + random() * (DESIGN_SIZE - 480);
+            y = index % 2 === 0 ? 210 + random() * 620 : DESIGN_SIZE - 210 - random() * 620;
+          } else if (clipartPlacement === "aligned") {
+            const columns = Math.ceil(Math.sqrt(assets.length));
+            const rows = Math.ceil(assets.length / columns);
+            const col = index % columns;
+            const row = Math.floor(index / columns);
+            x = 260 + (col * (DESIGN_SIZE - 520)) / Math.max(1, columns - 1);
+            y = 260 + (row * (DESIGN_SIZE - 520)) / Math.max(1, rows - 1);
+          } else {
+            x = 160 + random() * (DESIGN_SIZE - 320);
+            y = 160 + random() * (DESIGN_SIZE - 320);
+          }
+
+          x = clamp(x, drawWidth / 2 + 40, DESIGN_SIZE - drawWidth / 2 - 40);
+          y = clamp(y, drawHeight / 2 + 40, DESIGN_SIZE - drawHeight / 2 - 40);
+          const rect: Rect = {
+            x: x - drawWidth / 2 - clipartDistance / 2,
+            y: y - drawHeight / 2 - clipartDistance / 2,
+            width: drawWidth + clipartDistance,
+            height: drawHeight + clipartDistance
+          };
+
+          if (!rectsOverlap(rect, safeArea) && placedRects.every((placed) => !rectsOverlap(rect, placed))) {
+            placedRects.push(rect);
+            chosen = { x, y };
+            break;
+          }
+        }
+
+        if (!chosen) return;
+
         context.save();
-        context.translate(clamp(x, 120, DESIGN_SIZE - 120), clamp(y, 120, DESIGN_SIZE - 120));
+        context.translate(chosen.x, chosen.y);
         context.rotate((random() - 0.5) * (topStyle === "cleanSpace" ? 0.25 : 0.55));
         context.drawImage(clipart.trimmedCanvas, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
         context.restore();
       });
 
-      const panelWidth = topStyle === "cleanSpace" ? 1760 : topStyle === "fullCollage" ? 1900 : 1680;
-      const panelHeight = topStyle === "playfulPop" ? 900 : 780;
-      const panelX = (DESIGN_SIZE - panelWidth) / 2;
-      const panelY = (DESIGN_SIZE - panelHeight) / 2;
-
       if (topPanelEnabled || topStyle === "fullCollage") {
-        drawPanel(context, panelX, panelY, panelWidth, panelHeight, topPanelShape, panelFill, panelStroke);
+        context.save();
+        if (topPanelShape === "square") {
+          context.fillStyle = panelFill;
+          context.strokeStyle = panelStroke;
+          context.lineWidth = 8;
+          context.beginPath();
+          context.roundRect(frameX, frameY, frameW, frameH, frameRadius);
+          context.fill();
+          context.stroke();
+        } else {
+          drawPanel(context, frameX, frameY, frameW, frameH, "circle", panelFill, panelStroke);
+        }
+        context.restore();
       }
 
       context.textAlign = "center";
@@ -969,29 +1055,45 @@ export default function Home() {
         context,
         topTitle,
         topTitleFont,
-        topStyle === "playfulPop" ? 245 : 215,
+        topTitleSize,
         76,
-        panelWidth - 220
+        blockWidth - 120
       );
       context.font = `${topTitleFont.weight} ${titleSize}px ${topTitleFont.stack}`;
       context.fillStyle = rgbToHex(titleColor);
-      drawWrappedText(context, topTitle, DESIGN_SIZE / 2, DESIGN_SIZE / 2 - 145, panelWidth - 220, titleSize * 1.03, 2);
+      drawWrappedText(
+        context,
+        topTitle,
+        blockCenterX + topTitleX * 10,
+        blockCenterY + topTitleY,
+        blockWidth - 120,
+        titleSize * (topTitleLineHeight / 100),
+        2
+      );
 
-      const subtitleSize = fitFontSize(context, topSubtitle, topSubtitleFont, 88, 34, panelWidth - 260);
+      const subtitleSize = fitFontSize(context, topSubtitle, topSubtitleFont, topSubtitleSize, 28, blockWidth - 160);
       context.font = `${topSubtitleFont.weight} ${subtitleSize}px ${topSubtitleFont.stack}`;
       context.fillStyle = rgbToHex(subtitleColor);
-      context.fillText(topSubtitle, DESIGN_SIZE / 2, DESIGN_SIZE / 2 + 135);
+      drawWrappedText(
+        context,
+        topSubtitle,
+        blockCenterX + topSubtitleX * 10,
+        blockCenterY + topSubtitleY,
+        blockWidth - 160,
+        subtitleSize * (topSubtitleLineHeight / 100),
+        2
+      );
 
-      if (topSmallText.trim()) {
-        context.font = `800 54px ${topSubtitleFont.stack}`;
+      if (showTopSmallText && topSmallText.trim()) {
+        context.font = `800 ${topSmallTextSize}px ${topSubtitleFont.stack}`;
         context.fillStyle = rgbToHex(mix(subtitleColor, hexToRgb("#171514"), 0.22));
-        context.fillText(topSmallText, DESIGN_SIZE / 2, DESIGN_SIZE / 2 + 250);
+        context.fillText(topSmallText, blockCenterX + topSmallTextX * 10, blockCenterY + topSmallTextY);
       }
 
       if (topBadgeText.trim()) {
         const badgeColor = accentColor;
-        const badgeX = panelX + panelWidth - 250;
-        const badgeY = panelY + 115;
+        const badgeX = frameX + frameW - 210;
+        const badgeY = frameY + 105;
         context.fillStyle = rgbToHex(badgeColor);
         context.beginPath();
         context.roundRect(badgeX - 175, badgeY - 70, 350, 140, 70);
@@ -1016,21 +1118,44 @@ export default function Home() {
       accentColor,
       activePreset.background,
       assetSource,
+      clipartDistance,
       clipartDensity,
+      clipartPlacement,
       cliparts,
+      frameHeight,
+      frameRadius,
+      frameWidth,
       fontLoadTick,
+      showTopSmallText,
       subtitleColor,
+      textBlockHeight,
+      textBlockWidth,
+      textBlockX,
+      textBlockY,
       titleColor,
       topBadgeText,
+      topClipartSize,
+      topClipartVariation,
       topPanelEnabled,
       topPanelShape,
       topSeed,
       topSmallText,
+      topSmallTextSize,
+      topSmallTextX,
+      topSmallTextY,
       topStyle,
       topSubtitle,
       topSubtitleFont,
+      topSubtitleLineHeight,
+      topSubtitleSize,
+      topSubtitleX,
+      topSubtitleY,
       topTitle,
-      topTitleFont
+      topTitleFont,
+      topTitleLineHeight,
+      topTitleSize,
+      topTitleX,
+      topTitleY
     ]
   );
 
@@ -1441,12 +1566,6 @@ export default function Home() {
                 </select>
               </label>
             </div>
-            <button type="button" onClick={() => handleDownload(true)}>
-              現在のページを文字ありで保存
-            </button>
-            <button type="button" onClick={() => handleDownload(false)}>
-              現在のページを文字なしで保存
-            </button>
             <button type="button" onClick={() => handleDownloadAll(true)}>
               全ページを文字ありで保存
             </button>
@@ -1521,7 +1640,7 @@ export default function Home() {
                 ))}
               </div>
               <button className="utilityButton" type="button" onClick={() => setTopSeed(Date.now())}>
-                ランダム配置
+                配置をシャッフル
               </button>
             </section>
 
@@ -1561,26 +1680,26 @@ export default function Home() {
                 <h2>文字とフォント</h2>
               </div>
               <label>
-                Main title
+                メインタイトル
                 <input value={topTitle} onChange={(event) => setTopTitle(event.target.value)} />
               </label>
               <label>
-                Subtitle
+                サブタイトル
                 <input value={topSubtitle} onChange={(event) => setTopSubtitle(event.target.value)} />
               </label>
               <div className="twoColumn">
                 <label>
-                  Small text
+                  小文字テキスト
                   <input value={topSmallText} onChange={(event) => setTopSmallText(event.target.value)} />
                 </label>
                 <label>
-                  Badge text
+                  バッジテキスト
                   <input value={topBadgeText} onChange={(event) => setTopBadgeText(event.target.value)} />
                 </label>
               </div>
               <div className="twoColumn">
                 <label>
-                  Main title font
+                  メインタイトルフォント
                   <select value={topTitleFontKey} onChange={(event) => setTopTitleFontKey(event.target.value as FontKey)}>
                     {fontOptions.map((font) => (
                       <option key={font.key} value={font.key}>
@@ -1590,7 +1709,7 @@ export default function Home() {
                   </select>
                 </label>
                 <label>
-                  Subtitle font
+                  サブタイトルフォント
                   <select value={topSubtitleFontKey} onChange={(event) => setTopSubtitleFontKey(event.target.value as FontKey)}>
                     {fontOptions.map((font) => (
                       <option key={font.key} value={font.key}>
@@ -1605,19 +1724,19 @@ export default function Home() {
             <section className="controlGroup">
               <div className="sectionTitle">
                 <span>5</span>
-                <h2>トップ編集</h2>
+                <h2>中央テキストフレーム</h2>
               </div>
-              <label className="checkLabel">
-                <input
-                  type="checkbox"
-                  checked={topPanelEnabled}
-                  onChange={(event) => setTopPanelEnabled(event.target.checked)}
-                />
-                <span>テキストパネルを表示</span>
-              </label>
+              <div className="modeButtonRow">
+                <button type="button" className={!topPanelEnabled ? "active" : ""} onClick={() => setTopPanelEnabled(false)}>
+                  フレームなし
+                </button>
+                <button type="button" className={topPanelEnabled ? "active" : ""} onClick={() => setTopPanelEnabled(true)}>
+                  フレームあり
+                </button>
+              </div>
               <div className="twoColumn">
                 <label>
-                  Text panel shape
+                  フレーム形状
                   <select value={topPanelShape} onChange={(event) => setTopPanelShape(event.target.value as PanelShape)}>
                     {panelShapeOptions.map((option) => (
                       <option key={option.value} value={option.value}>
@@ -1626,16 +1745,110 @@ export default function Home() {
                     ))}
                   </select>
                 </label>
+                {topPanelShape === "square" ? (
+                  <label>
+                    角丸
+                    <input type="range" min="0" max="240" value={frameRadius} onChange={(event) => setFrameRadius(Number(event.target.value))} />
+                  </label>
+                ) : null}
+              </div>
+              <div className="sliderStack">
                 <label>
-                  Clipart density
+                  <span>フレーム幅 <b>{frameWidth}</b></span>
+                  <input type="range" min="800" max="2300" value={frameWidth} onChange={(event) => setFrameWidth(Number(event.target.value))} />
+                </label>
+                <label>
+                  <span>フレーム高さ <b>{frameHeight}</b></span>
+                  <input type="range" min="420" max="1500" value={frameHeight} onChange={(event) => setFrameHeight(Number(event.target.value))} />
+                </label>
+              </div>
+            </section>
+
+            <section className="controlGroup">
+              <div className="sectionTitle">
+                <span>6</span>
+                <h2>テキストブロック</h2>
+              </div>
+              <div className="sliderStack">
+                <label><span>テキストブロックの上下位置 <b>{textBlockY}</b></span><input type="range" min="-120" max="120" value={textBlockY} onChange={(event) => setTextBlockY(Number(event.target.value))} /></label>
+                <label><span>テキストブロックの左右位置 <b>{textBlockX}</b></span><input type="range" min="-120" max="120" value={textBlockX} onChange={(event) => setTextBlockX(Number(event.target.value))} /></label>
+                <label><span>テキストブロック幅 <b>{textBlockWidth}</b></span><input type="range" min="900" max="2300" value={textBlockWidth} onChange={(event) => setTextBlockWidth(Number(event.target.value))} /></label>
+                <label><span>テキストブロック高さ <b>{textBlockHeight}</b></span><input type="range" min="420" max="1500" value={textBlockHeight} onChange={(event) => setTextBlockHeight(Number(event.target.value))} /></label>
+              </div>
+            </section>
+
+            <section className="controlGroup">
+              <div className="sectionTitle">
+                <span>7</span>
+                <h2>タイトル調整</h2>
+              </div>
+              <div className="sliderStack">
+                <label><span>タイトルサイズ <b>{topTitleSize}</b></span><input type="range" min="80" max="300" value={topTitleSize} onChange={(event) => setTopTitleSize(Number(event.target.value))} /></label>
+                <label><span>タイトルの上下位置 <b>{topTitleY}</b></span><input type="range" min="-420" max="240" value={topTitleY} onChange={(event) => setTopTitleY(Number(event.target.value))} /></label>
+                <label><span>タイトルの左右位置 <b>{topTitleX}</b></span><input type="range" min="-120" max="120" value={topTitleX} onChange={(event) => setTopTitleX(Number(event.target.value))} /></label>
+                <label><span>タイトル行間 <b>{topTitleLineHeight}%</b></span><input type="range" min="80" max="150" value={topTitleLineHeight} onChange={(event) => setTopTitleLineHeight(Number(event.target.value))} /></label>
+              </div>
+            </section>
+
+            <section className="controlGroup">
+              <div className="sectionTitle">
+                <span>8</span>
+                <h2>サブタイトル調整</h2>
+              </div>
+              <div className="sliderStack">
+                <label><span>サブタイトルサイズ <b>{topSubtitleSize}</b></span><input type="range" min="30" max="150" value={topSubtitleSize} onChange={(event) => setTopSubtitleSize(Number(event.target.value))} /></label>
+                <label><span>サブタイトルの上下位置 <b>{topSubtitleY}</b></span><input type="range" min="-180" max="420" value={topSubtitleY} onChange={(event) => setTopSubtitleY(Number(event.target.value))} /></label>
+                <label><span>サブタイトルの左右位置 <b>{topSubtitleX}</b></span><input type="range" min="-120" max="120" value={topSubtitleX} onChange={(event) => setTopSubtitleX(Number(event.target.value))} /></label>
+                <label><span>サブタイトル行間 <b>{topSubtitleLineHeight}%</b></span><input type="range" min="80" max="160" value={topSubtitleLineHeight} onChange={(event) => setTopSubtitleLineHeight(Number(event.target.value))} /></label>
+              </div>
+            </section>
+
+            <section className="controlGroup">
+              <div className="sectionTitle">
+                <span>9</span>
+                <h2>小文字テキスト</h2>
+              </div>
+              <label className="checkLabel">
+                <input type="checkbox" checked={showTopSmallText} onChange={(event) => setShowTopSmallText(event.target.checked)} />
+                <span>小文字テキストを表示</span>
+              </label>
+              <div className="sliderStack">
+                <label><span>小文字テキストサイズ <b>{topSmallTextSize}</b></span><input type="range" min="24" max="100" value={topSmallTextSize} onChange={(event) => setTopSmallTextSize(Number(event.target.value))} /></label>
+                <label><span>小文字テキストの上下位置 <b>{topSmallTextY}</b></span><input type="range" min="-50" max="520" value={topSmallTextY} onChange={(event) => setTopSmallTextY(Number(event.target.value))} /></label>
+                <label><span>小文字テキストの左右位置 <b>{topSmallTextX}</b></span><input type="range" min="-120" max="120" value={topSmallTextX} onChange={(event) => setTopSmallTextX(Number(event.target.value))} /></label>
+              </div>
+            </section>
+
+            <section className="controlGroup">
+              <div className="sectionTitle">
+                <span>10</span>
+                <h2>素材配置</h2>
+              </div>
+              <label>
+                素材配置スタイル
+                <select value={clipartPlacement} onChange={(event) => setClipartPlacement(event.target.value as ClipartPlacement)}>
+                  {placementOptions.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+              </label>
+              <div className="twoColumn">
+                <label>
+                  素材密度
                   <select value={clipartDensity} onChange={(event) => setClipartDensity(event.target.value as ClipartDensity)}>
                     {densityOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
+                      <option key={option.value} value={option.value}>{option.label}</option>
                     ))}
                   </select>
                 </label>
+                <button className="utilityButton" type="button" onClick={() => setTopSeed(Date.now())}>
+                  配置をシャッフル
+                </button>
+              </div>
+              <div className="sliderStack">
+                <label><span>素材全体サイズ <b>{topClipartSize}</b></span><input type="range" min="220" max="820" value={topClipartSize} onChange={(event) => setTopClipartSize(Number(event.target.value))} /></label>
+                <label><span>ランダムサイズ変化 <b>{topClipartVariation}%</b></span><input type="range" min="0" max="90" value={topClipartVariation} onChange={(event) => setTopClipartVariation(Number(event.target.value))} /></label>
+                <label><span>素材同士の距離 <b>{clipartDistance}</b></span><input type="range" min="20" max="220" value={clipartDistance} onChange={(event) => setClipartDistance(Number(event.target.value))} /></label>
               </div>
             </section>
 
@@ -1717,14 +1930,6 @@ export default function Home() {
           </div>
           <div className="canvasFrame">
             <canvas ref={previewRef} width={PREVIEW_SIZE} height={PREVIEW_SIZE} aria-label="サムネイルプレビュー" />
-          </div>
-          <div className="currentPageDownloads">
-            <button type="button" onClick={() => handleDownload(true)}>
-              現在のページを文字ありで保存
-            </button>
-            <button type="button" onClick={() => handleDownload(false)}>
-              現在のページを文字なしで保存
-            </button>
           </div>
         </section>
       </section>
