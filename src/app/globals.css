@@ -168,19 +168,34 @@ button:focus-visible {
 }
 
 .fileDrop {
+  display: grid;
   align-items: center;
   justify-items: center;
-  min-height: 96px;
+  min-height: 126px;
   border: 2px dashed #c9b8a7;
   border-radius: 8px;
   background: var(--soft);
   color: var(--ink);
   cursor: pointer;
+  gap: 5px;
+  text-align: center;
+  transition: background 160ms ease, border-color 160ms ease;
 }
 
+.fileDrop.dragging {
+  border-color: var(--accent);
+  background: #fff2e8;
+}
+
+.fileDrop b,
 .fileDrop span {
   font-size: 16px;
   font-weight: 900;
+}
+
+.fileDrop span {
+  color: var(--accent-dark);
+  font-size: 14px;
 }
 
 .fileDrop small {
@@ -217,6 +232,37 @@ button:focus-visible {
   color: #9a261f;
   font-size: 13px;
   font-weight: 800;
+}
+
+.assetPreviewGrid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 6px;
+}
+
+.assetPreviewGrid img,
+.moreAssets {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background:
+    linear-gradient(45deg, #f3f0eb 25%, transparent 25%),
+    linear-gradient(-45deg, #f3f0eb 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #f3f0eb 75%),
+    linear-gradient(-45deg, transparent 75%, #f3f0eb 75%);
+  background-color: #ffffff;
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+  background-size: 16px 16px;
+  object-fit: contain;
+}
+
+.moreAssets {
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
 }
 
 .colorStrip {
@@ -278,6 +324,41 @@ button:focus-visible {
   gap: 10px;
 }
 
+.fontPreviewGrid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.fontPreview {
+  display: grid;
+  gap: 3px;
+  min-height: 58px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--ink);
+  cursor: pointer;
+  padding: 8px 10px;
+  text-align: left;
+}
+
+.fontPreview.active {
+  border-color: var(--accent);
+  background: #fff8f1;
+}
+
+.fontPreview span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.fontPreview b {
+  font-size: 15px;
+  line-height: 1.2;
+}
+
 .sliderStack {
   display: grid;
   gap: 10px;
@@ -314,6 +395,11 @@ input[type="range"] {
   background: #2e5f61;
 }
 
+.downloadGroup button:nth-child(3),
+.downloadGroup button:nth-child(4) {
+  background: #6b6258;
+}
+
 .downloadGroup button:hover {
   filter: brightness(0.94);
 }
@@ -338,6 +424,53 @@ input[type="range"] {
   font-size: 14px;
   font-weight: 900;
   padding: 8px 13px;
+}
+
+.pageControls {
+  display: grid;
+  grid-template-columns: 120px 1fr 120px;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.pageControls button,
+.pageJumpGrid button,
+.currentPageDownloads button {
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #ffffff;
+  color: var(--ink);
+  cursor: pointer;
+  font-weight: 900;
+}
+
+.pageControls button:disabled {
+  color: #b9b0a6;
+  cursor: not-allowed;
+}
+
+.pageControls strong {
+  text-align: center;
+}
+
+.pageJumpGrid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.pageJumpGrid button {
+  min-height: 32px;
+  padding: 5px 10px;
+}
+
+.pageJumpGrid button.active {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #ffffff;
 }
 
 .previewMeta {
@@ -370,6 +503,25 @@ input[type="range"] {
   aspect-ratio: 1 / 1;
   background: #ffffff;
   border: 1px solid var(--line);
+}
+
+.currentPageDownloads {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.currentPageDownloads button:first-child {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #ffffff;
+}
+
+.currentPageDownloads button:last-child {
+  background: #2e5f61;
+  border-color: #2e5f61;
+  color: #ffffff;
 }
 
 .hiddenCanvas {
@@ -411,13 +563,23 @@ input[type="range"] {
 
   .presetGrid,
   .twoColumn,
+  .fontPreviewGrid,
+  .currentPageDownloads,
   .downloadGroup {
     grid-template-columns: 1fr;
+  }
+
+  .assetPreviewGrid {
+    grid-template-columns: repeat(6, 1fr);
   }
 
   .previewHeader {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .pageControls {
+    grid-template-columns: 1fr;
   }
 
   .previewHeader h2 {

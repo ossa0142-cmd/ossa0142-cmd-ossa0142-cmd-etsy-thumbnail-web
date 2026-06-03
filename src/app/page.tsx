@@ -1,6 +1,14 @@
 "use client";
 
-import { ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  ChangeEvent,
+  DragEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState
+} from "react";
 
 const CANVAS_SIZE = 3000;
 const PREVIEW_SIZE = 760;
@@ -15,6 +23,14 @@ type PresetKey =
   | "minimalLineArt"
   | "pastelNursery"
   | "boldKidsParty";
+type FontKey =
+  | "handwritten"
+  | "script"
+  | "cute"
+  | "simple"
+  | "bold"
+  | "natural"
+  | "vintage";
 
 type Rgb = {
   r: number;
@@ -24,6 +40,8 @@ type Rgb = {
 
 type UploadedClipart = {
   id: string;
+  name: string;
+  previewUrl: string;
   trimmedCanvas: HTMLCanvasElement;
   trimmedWidth: number;
   trimmedHeight: number;
@@ -34,15 +52,22 @@ type Preset = {
   key: PresetKey;
   label: string;
   description: string;
-  font: string;
-  weight: number;
   fallback: string[];
   background: string;
-  badge: "pill" | "stamp" | "soft" | "square" | "line";
   titleScale: number;
   subtitleScale: number;
   margin: number;
   textAreaBoost: number;
+  defaultTitleFont: FontKey;
+  defaultSubtitleFont: FontKey;
+};
+
+type FontOption = {
+  key: FontKey;
+  label: string;
+  sample: string;
+  stack: string;
+  weight: number;
 };
 
 type GridSize = {
@@ -57,113 +82,158 @@ const layoutOptions: Array<{ label: string; value: LayoutOption }> = [
   { label: "5×4", value: "5x4" }
 ];
 
+const fontOptions: FontOption[] = [
+  {
+    key: "handwritten",
+    label: "手書き風",
+    sample: "Handmade Clipart",
+    stack: "'Comic Sans MS', 'Hiragino Maru Gothic ProN', 'Yu Gothic', cursive",
+    weight: 800
+  },
+  {
+    key: "script",
+    label: "筆記体",
+    sample: "Elegant Bundle",
+    stack: "Georgia, 'Times New Roman', 'Yu Mincho', serif",
+    weight: 700
+  },
+  {
+    key: "cute",
+    label: "かわいい",
+    sample: "Cute Nursery",
+    stack: "'Arial Rounded MT Bold', 'Hiragino Maru Gothic ProN', 'Yu Gothic', sans-serif",
+    weight: 900
+  },
+  {
+    key: "simple",
+    label: "シンプル",
+    sample: "Minimal Clipart",
+    stack: "'Helvetica Neue', Arial, 'Yu Gothic', sans-serif",
+    weight: 700
+  },
+  {
+    key: "bold",
+    label: "太字",
+    sample: "Bold Kids Party",
+    stack: "'Arial Black', Impact, 'Yu Gothic', sans-serif",
+    weight: 900
+  },
+  {
+    key: "natural",
+    label: "ナチュラル",
+    sample: "Natural Art Set",
+    stack: "Trebuchet MS, 'Hiragino Kaku Gothic ProN', 'Yu Gothic', sans-serif",
+    weight: 800
+  },
+  {
+    key: "vintage",
+    label: "ヴィンテージ",
+    sample: "Vintage Gouache",
+    stack: "Georgia, Garamond, 'Yu Mincho', serif",
+    weight: 800
+  }
+];
+
 const presets: Preset[] = [
   {
     key: "watercolorBaby",
     label: "Watercolor Baby（水彩ベビー）",
     description: "やわらかい水彩・ベビー向け",
-    font: "'Hiragino Maru Gothic ProN', 'Arial Rounded MT Bold', 'Yu Gothic', sans-serif",
-    weight: 800,
     fallback: ["#89b7c9", "#f2b6c2", "#f4d58d", "#9cc7a1"],
     background: "#fffdf9",
-    badge: "soft",
     titleScale: 1,
     subtitleScale: 0.9,
-    margin: 118,
-    textAreaBoost: 1
+    margin: 110,
+    textAreaBoost: 1,
+    defaultTitleFont: "cute",
+    defaultSubtitleFont: "natural"
   },
   {
     key: "vintageGouache",
     label: "Vintage Gouache（ヴィンテージガッシュ）",
     description: "くすみカラー・手描き感",
-    font: "Georgia, 'Yu Mincho', serif",
-    weight: 800,
     fallback: ["#9a6b4f", "#c48b5d", "#66806a", "#d7b98e"],
     background: "#fffaf0",
-    badge: "stamp",
     titleScale: 0.96,
     subtitleScale: 0.85,
-    margin: 128,
-    textAreaBoost: 1.08
+    margin: 120,
+    textAreaBoost: 1.05,
+    defaultTitleFont: "vintage",
+    defaultSubtitleFont: "natural"
   },
   {
     key: "halloweenCute",
     label: "Halloween Cute（ハロウィン）",
     description: "かわいい季節イベント",
-    font: "'Trebuchet MS', 'Yu Gothic', sans-serif",
-    weight: 900,
     fallback: ["#f47b20", "#7a4ca0", "#1f1f1f", "#6aa84f"],
     background: "#fff9f0",
-    badge: "pill",
     titleScale: 1.05,
     subtitleScale: 0.95,
-    margin: 108,
-    textAreaBoost: 0.96
+    margin: 96,
+    textAreaBoost: 0.95,
+    defaultTitleFont: "bold",
+    defaultSubtitleFont: "cute"
   },
   {
     key: "christmasCozy",
     label: "Christmas Cozy（クリスマス）",
     description: "あたたかいホリデー感",
-    font: "Georgia, 'Yu Mincho', serif",
-    weight: 800,
     fallback: ["#b23a3a", "#2f7d57", "#d8af55", "#f0d7c0"],
     background: "#fffdf8",
-    badge: "soft",
     titleScale: 0.98,
     subtitleScale: 0.9,
-    margin: 120,
-    textAreaBoost: 1
+    margin: 110,
+    textAreaBoost: 1,
+    defaultTitleFont: "vintage",
+    defaultSubtitleFont: "natural"
   },
   {
     key: "minimalLineArt",
     label: "Minimal Line Art（線画）",
     description: "白場多め・上品シンプル",
-    font: "'Helvetica Neue', Arial, 'Yu Gothic', sans-serif",
-    weight: 700,
     fallback: ["#222222", "#b9a995", "#ded6ca", "#8f8f8f"],
     background: "#ffffff",
-    badge: "line",
     titleScale: 0.88,
     subtitleScale: 0.78,
-    margin: 150,
-    textAreaBoost: 1.15
+    margin: 140,
+    textAreaBoost: 1.08,
+    defaultTitleFont: "simple",
+    defaultSubtitleFont: "simple"
   },
   {
     key: "pastelNursery",
     label: "Pastel Nursery（パステル）",
     description: "淡い色・子ども部屋風",
-    font: "'Hiragino Maru Gothic ProN', 'Arial Rounded MT Bold', 'Yu Gothic', sans-serif",
-    weight: 800,
     fallback: ["#f5b8cf", "#a7d8d0", "#f6dd9a", "#b7c8f2"],
     background: "#fffefe",
-    badge: "soft",
     titleScale: 0.98,
     subtitleScale: 0.88,
-    margin: 112,
-    textAreaBoost: 0.98
+    margin: 100,
+    textAreaBoost: 0.98,
+    defaultTitleFont: "cute",
+    defaultSubtitleFont: "handwritten"
   },
   {
     key: "boldKidsParty",
     label: "Bold Kids Party（ポップ）",
     description: "明るく目立つキッズ向け",
-    font: "'Arial Black', 'Yu Gothic', sans-serif",
-    weight: 900,
     fallback: ["#ef476f", "#ffd166", "#06d6a0", "#118ab2"],
     background: "#ffffff",
-    badge: "square",
     titleScale: 1.08,
     subtitleScale: 0.96,
-    margin: 96,
-    textAreaBoost: 0.92
+    margin: 86,
+    textAreaBoost: 0.92,
+    defaultTitleFont: "bold",
+    defaultSubtitleFont: "cute"
   }
 ];
 
-function layoutToGrid(layout: LayoutOption, pngCount: number): GridSize {
+function layoutToGrid(layout: LayoutOption, assetCount: number): GridSize {
   if (layout === "4x3") return { columns: 4, rows: 3 };
   if (layout === "4x4") return { columns: 4, rows: 4 };
   if (layout === "5x4") return { columns: 5, rows: 4 };
-  if (pngCount >= 61 && pngCount <= 90) return { columns: 5, rows: 4 };
-  if (pngCount >= 41 && pngCount <= 60) return { columns: 4, rows: 4 };
+  if (assetCount >= 61 && assetCount <= 90) return { columns: 5, rows: 4 };
+  if (assetCount >= 41 && assetCount <= 60) return { columns: 4, rows: 4 };
   return { columns: 4, rows: 3 };
 }
 
@@ -188,11 +258,6 @@ function mix(color: Rgb, target: Rgb, amount: number): Rgb {
   };
 }
 
-function contrastColor(color: Rgb) {
-  const luminance = (color.r * 299 + color.g * 587 + color.b * 114) / 1000;
-  return luminance > 170 ? "#1f1f1f" : "#ffffff";
-}
-
 function isNeutralColor(r: number, g: number, b: number) {
   const max = Math.max(r, g, b);
   const min = Math.min(r, g, b);
@@ -204,6 +269,14 @@ function isNeutralColor(r: number, g: number, b: number) {
 
 function colorDistance(a: Rgb, b: Rgb) {
   return Math.hypot(a.r - b.r, a.g - b.g, a.b - b.b);
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max);
+}
+
+function getFont(key: FontKey) {
+  return fontOptions.find((font) => font.key === key) ?? fontOptions[2];
 }
 
 function extractColorsFromCanvas(canvas: HTMLCanvasElement, maxColors = 5): Rgb[] {
@@ -269,9 +342,7 @@ function trimTransparentPadding(image: HTMLImageElement): HTMLCanvasElement {
   sourceCanvas.height = image.naturalHeight;
 
   const sourceContext = sourceCanvas.getContext("2d", { willReadFrequently: true });
-  if (!sourceContext) {
-    throw new Error("このブラウザではCanvasを利用できません。");
-  }
+  if (!sourceContext) throw new Error("このブラウザではCanvasを利用できません。");
 
   sourceContext.drawImage(image, 0, 0);
   const pixels = sourceContext.getImageData(0, 0, sourceCanvas.width, sourceCanvas.height);
@@ -302,9 +373,7 @@ function trimTransparentPadding(image: HTMLImageElement): HTMLCanvasElement {
   trimmedCanvas.height = trimmedHeight;
 
   const trimmedContext = trimmedCanvas.getContext("2d");
-  if (!trimmedContext) {
-    throw new Error("このブラウザではCanvasを利用できません。");
-  }
+  if (!trimmedContext) throw new Error("このブラウザではCanvasを利用できません。");
 
   trimmedContext.drawImage(
     sourceCanvas,
@@ -321,17 +390,31 @@ function trimTransparentPadding(image: HTMLImageElement): HTMLCanvasElement {
   return trimmedCanvas;
 }
 
+function createPreviewUrl(canvas: HTMLCanvasElement) {
+  const previewCanvas = document.createElement("canvas");
+  previewCanvas.width = 140;
+  previewCanvas.height = 140;
+  const context = previewCanvas.getContext("2d");
+  if (!context) return "";
+
+  context.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+  const ratio = Math.min(118 / canvas.width, 118 / canvas.height);
+  const drawWidth = canvas.width * ratio;
+  const drawHeight = canvas.height * ratio;
+  context.drawImage(canvas, (140 - drawWidth) / 2, (140 - drawHeight) / 2, drawWidth, drawHeight);
+  return previewCanvas.toDataURL("image/png");
+}
+
 function fitFontSize(
   context: CanvasRenderingContext2D,
   text: string,
-  font: string,
-  fontWeight: number,
+  font: FontOption,
   maxSize: number,
   minSize: number,
   maxWidth: number
 ) {
   for (let size = maxSize; size >= minSize; size -= 2) {
-    context.font = `${fontWeight} ${size}px ${font}`;
+    context.font = `${font.weight} ${size}px ${font.stack}`;
     if (context.measureText(text).width <= maxWidth) return size;
   }
 
@@ -378,27 +461,42 @@ function downloadCanvas(canvas: HTMLCanvasElement, title: string, suffix: string
 export default function Home() {
   const renderCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const previewRef = useRef<HTMLCanvasElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [cliparts, setCliparts] = useState<UploadedClipart[]>([]);
   const [title, setTitle] = useState("Watercolor Baby Clipart");
-  const [pngCount, setPngCount] = useState(40);
   const [subtitle, setSubtitle] = useState(DEFAULT_SUBTITLE);
   const [presetKey, setPresetKey] = useState<PresetKey>("watercolorBaby");
+  const [titleFontKey, setTitleFontKey] = useState<FontKey>("cute");
+  const [subtitleFontKey, setSubtitleFontKey] = useState<FontKey>("natural");
   const [layout, setLayout] = useState<LayoutOption>("auto");
-  const [clipartSize, setClipartSize] = useState(94);
-  const [topTitleArea, setTopTitleArea] = useState(22);
-  const [horizontalSpacing, setHorizontalSpacing] = useState(5);
-  const [verticalSpacing, setVerticalSpacing] = useState(5);
+  const [selectedPage, setSelectedPage] = useState(0);
+  const [clipartSize, setClipartSize] = useState(98);
+  const [topTitleArea, setTopTitleArea] = useState(21);
+  const [horizontalSpacing, setHorizontalSpacing] = useState(4);
+  const [verticalSpacing, setVerticalSpacing] = useState(4);
+  const [titleY, setTitleY] = useState(185);
+  const [titleX, setTitleX] = useState(0);
+  const [titleFontSize, setTitleFontSize] = useState(178);
+  const [subtitleY, setSubtitleY] = useState(390);
+  const [subtitleX, setSubtitleX] = useState(0);
+  const [subtitleFontSize, setSubtitleFontSize] = useState(66);
+  const [textGap, setTextGap] = useState(78);
+  const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState("");
 
   const activePreset = useMemo(
     () => presets.find((preset) => preset.key === presetKey) ?? presets[0],
     [presetKey]
   );
-  const activeGrid = useMemo(() => layoutToGrid(layout, pngCount), [layout, pngCount]);
-  const visibleCliparts = useMemo(
-    () => cliparts.slice(0, activeGrid.columns * activeGrid.rows),
-    [activeGrid.columns, activeGrid.rows, cliparts]
+  const activeGrid = useMemo(() => layoutToGrid(layout, cliparts.length), [cliparts.length, layout]);
+  const pageSize = activeGrid.columns * activeGrid.rows;
+  const pageCount = Math.max(1, Math.ceil(cliparts.length / pageSize));
+  const currentPageAssets = useMemo(
+    () => cliparts.slice(selectedPage * pageSize, selectedPage * pageSize + pageSize),
+    [cliparts, pageSize, selectedPage]
   );
+  const titleFont = getFont(titleFontKey);
+  const subtitleFont = getFont(subtitleFontKey);
   const extractedColors = useMemo(() => {
     const palette: Rgb[] = [];
     for (const clipart of cliparts) {
@@ -411,29 +509,33 @@ export default function Home() {
     }
     return palette;
   }, [cliparts]);
-  const palette = useMemo(
-    () => {
-      const colors: Rgb[] = [];
-      const candidates = [...extractedColors, ...activePreset.fallback.map(hexToRgb)];
+  const palette = useMemo(() => {
+    const colors: Rgb[] = [];
+    const candidates = [...extractedColors, ...activePreset.fallback.map(hexToRgb)];
 
-      for (const color of candidates) {
-        if (colors.every((existing) => colorDistance(existing, color) > 42)) {
-          colors.push(color);
-        }
-        if (colors.length === 5) break;
+    for (const color of candidates) {
+      if (colors.every((existing) => colorDistance(existing, color) > 42)) {
+        colors.push(color);
       }
+      if (colors.length === 5) break;
+    }
 
-      return colors;
-    },
-    [activePreset.fallback, extractedColors]
-  );
+    return colors;
+  }, [activePreset.fallback, extractedColors]);
   const titleColor = palette[0] ?? hexToRgb("#222222");
   const subtitleColor = palette[1] ?? mix(titleColor, hexToRgb("#ffffff"), 0.35);
-  const accentColor = palette[2] ?? mix(titleColor, hexToRgb("#ffffff"), 0.2);
-  const softAccent = mix(accentColor, hexToRgb("#ffffff"), 0.78);
+
+  useEffect(() => {
+    setTitleFontKey(activePreset.defaultTitleFont);
+    setSubtitleFontKey(activePreset.defaultSubtitleFont);
+  }, [activePreset.defaultSubtitleFont, activePreset.defaultTitleFont]);
+
+  useEffect(() => {
+    setSelectedPage((page) => clamp(page, 0, pageCount - 1));
+  }, [pageCount]);
 
   const renderThumbnail = useCallback(
-    (options: { withText: boolean; targetCanvas?: HTMLCanvasElement } = { withText: true }) => {
+    (options: { withText: boolean; pageIndex?: number; targetCanvas?: HTMLCanvasElement } = { withText: true }) => {
       const canvas = options.targetCanvas ?? renderCanvasRef.current;
       if (!canvas) return;
 
@@ -441,24 +543,26 @@ export default function Home() {
       if (!context) return;
 
       const withText = options.withText;
+      const pageIndex = options.pageIndex ?? selectedPage;
+      const pageAssets = cliparts.slice(pageIndex * pageSize, pageIndex * pageSize + pageSize);
+
       context.clearRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
       context.fillStyle = activePreset.background;
       context.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
 
-      const margin = withText ? activePreset.margin : 90;
+      const margin = withText ? activePreset.margin : 70;
       const topAreaHeight = withText
         ? Math.round((topTitleArea / 100) * CANVAS_SIZE * activePreset.textAreaBoost)
-        : Math.round(CANVAS_SIZE * 0.07);
-      const bottomArea = withText ? 250 : 80;
-      const gridTop = withText ? Math.max(topAreaHeight + 20, 560) : 120;
-      const gridBottom = CANVAS_SIZE - bottomArea;
+        : Math.round(CANVAS_SIZE * 0.055);
+      const gridTop = withText ? Math.max(topAreaHeight + 8, 520) : 95;
+      const gridBottom = withText ? CANVAS_SIZE - 90 : CANVAS_SIZE - 70;
       const gridWidth = CANVAS_SIZE - margin * 2;
       const gridHeight = gridBottom - gridTop;
-      const columnGap = horizontalSpacing * (withText ? 7 : 4);
-      const rowGap = verticalSpacing * (withText ? 7 : 4);
+      const columnGap = horizontalSpacing * (withText ? 7 : 3.5);
+      const rowGap = verticalSpacing * (withText ? 7 : 3.5);
       const cellWidth = (gridWidth - columnGap * (activeGrid.columns - 1)) / activeGrid.columns;
       const cellHeight = (gridHeight - rowGap * (activeGrid.rows - 1)) / activeGrid.rows;
-      const sizeMultiplier = (withText ? clipartSize : Math.max(108, clipartSize + 18)) / 100;
+      const sizeMultiplier = (withText ? clipartSize : Math.max(116, clipartSize + 20)) / 100;
 
       context.textAlign = "center";
       context.textBaseline = "middle";
@@ -468,31 +572,36 @@ export default function Home() {
         const titleSize = fitFontSize(
           context,
           title,
-          activePreset.font,
-          activePreset.weight,
-          Math.round(190 * activePreset.titleScale),
-          82,
+          titleFont,
+          Math.round(titleFontSize * activePreset.titleScale),
+          58,
           maxTextWidth
         );
-        context.font = `${activePreset.weight} ${titleSize}px ${activePreset.font}`;
+        const safeTitleX = clamp(CANVAS_SIZE / 2 + titleX * 10, margin, CANVAS_SIZE - margin);
+        const safeTitleY = clamp(titleY, 75, Math.max(120, topAreaHeight - 110));
+
+        context.font = `${titleFont.weight} ${titleSize}px ${titleFont.stack}`;
         context.fillStyle = rgbToHex(titleColor);
-        drawWrappedText(context, title, CANVAS_SIZE / 2, 170, maxTextWidth, titleSize * 1.03, 2);
+        drawWrappedText(context, title, safeTitleX, safeTitleY, maxTextWidth, titleSize * 1.02, 2);
 
         const subtitleSize = fitFontSize(
           context,
           subtitle,
-          activePreset.font,
-          800,
-          Math.round(76 * activePreset.subtitleScale),
-          38,
+          subtitleFont,
+          Math.round(subtitleFontSize * activePreset.subtitleScale),
+          30,
           maxTextWidth
         );
-        context.font = `800 ${subtitleSize}px ${activePreset.font}`;
+        const safeSubtitleX = clamp(CANVAS_SIZE / 2 + subtitleX * 10, margin, CANVAS_SIZE - margin);
+        const preferredSubtitleY = Math.max(subtitleY, safeTitleY + titleSize * 0.48 + textGap);
+        const safeSubtitleY = clamp(preferredSubtitleY, safeTitleY + 56, Math.max(safeTitleY + 64, topAreaHeight - 34));
+
+        context.font = `${subtitleFont.weight} ${subtitleSize}px ${subtitleFont.stack}`;
         context.fillStyle = rgbToHex(subtitleColor);
-        context.fillText(subtitle, CANVAS_SIZE / 2, Math.max(330, topAreaHeight - 118));
+        context.fillText(subtitle, safeSubtitleX, safeSubtitleY);
       }
 
-      visibleCliparts.forEach((clipart, index) => {
+      pageAssets.forEach((clipart, index) => {
         const column = index % activeGrid.columns;
         const row = Math.floor(index / activeGrid.columns);
         const cellX = margin + column * (cellWidth + columnGap);
@@ -508,44 +617,8 @@ export default function Home() {
         context.drawImage(clipart.trimmedCanvas, drawX, drawY, drawWidth, drawHeight);
       });
 
-      if (withText) {
-        const badges = [`${pngCount} PNG`, "300 DPI", "Clipart Bundle"];
-        context.font = `800 62px ${activePreset.font}`;
-        const gap = 40;
-        const widths = badges.map((badge) => context.measureText(badge).width + 94);
-        const totalWidth = widths.reduce((sum, width) => sum + width, 0) + gap * (badges.length - 1);
-        let currentX = CANVAS_SIZE / 2 - totalWidth / 2;
-        const badgeY = CANVAS_SIZE - 125;
-
-        badges.forEach((badge, index) => {
-          const width = widths[index];
-          const height = 98;
-          const x = currentX;
-          const y = badgeY - height / 2;
-          const radius = activePreset.badge === "square" ? 18 : height / 2;
-
-          context.lineWidth = activePreset.badge === "line" || activePreset.badge === "stamp" ? 6 : 0;
-          context.strokeStyle = rgbToHex(titleColor);
-          context.fillStyle =
-            activePreset.badge === "pill" || activePreset.badge === "square"
-              ? rgbToHex(accentColor)
-              : rgbToHex(softAccent);
-          context.beginPath();
-          context.roundRect(x, y, width, height, radius);
-          context.fill();
-          if (activePreset.badge === "line" || activePreset.badge === "stamp") context.stroke();
-
-          context.fillStyle =
-            activePreset.badge === "pill" || activePreset.badge === "square"
-              ? contrastColor(accentColor)
-              : rgbToHex(titleColor);
-          context.fillText(badge, x + width / 2, badgeY + 2);
-          currentX += width + gap;
-        });
-      }
-
       const preview = previewRef.current;
-      if (preview && !options.targetCanvas && withText) {
+      if (preview && !options.targetCanvas) {
         const previewContext = preview.getContext("2d");
         if (!previewContext) return;
         previewContext.clearRect(0, 0, PREVIEW_SIZE, PREVIEW_SIZE);
@@ -553,21 +626,29 @@ export default function Home() {
       }
     },
     [
-      accentColor,
       activeGrid.columns,
       activeGrid.rows,
       activePreset,
       clipartSize,
+      cliparts,
       horizontalSpacing,
-      pngCount,
-      softAccent,
+      pageSize,
+      selectedPage,
       subtitle,
       subtitleColor,
+      subtitleFont,
+      subtitleFontSize,
+      subtitleX,
+      subtitleY,
+      textGap,
       title,
       titleColor,
+      titleFont,
+      titleFontSize,
+      titleX,
+      titleY,
       topTitleArea,
-      verticalSpacing,
-      visibleCliparts
+      verticalSpacing
     ]
   );
 
@@ -575,8 +656,8 @@ export default function Home() {
     renderThumbnail({ withText: true });
   }, [renderThumbnail]);
 
-  async function handleFiles(event: ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(event.target.files ?? []).filter((file) => file.type === "image/png");
+  async function addFiles(fileList: FileList | File[]) {
+    const files = Array.from(fileList).filter((file) => file.type === "image/png" || file.name.endsWith(".png"));
     setError("");
 
     if (files.length === 0) {
@@ -593,6 +674,8 @@ export default function Home() {
 
           return {
             id: `${file.name}-${file.lastModified}-${file.size}`,
+            name: file.name,
+            previewUrl: createPreviewUrl(trimmedCanvas),
             trimmedCanvas,
             trimmedWidth: trimmedCanvas.width,
             trimmedHeight: trimmedCanvas.height,
@@ -602,21 +685,36 @@ export default function Home() {
       );
 
       setCliparts((current) => [...current, ...loadedCliparts]);
-      setPngCount((current) =>
-        current === 40 || current === cliparts.length ? cliparts.length + loadedCliparts.length : current
-      );
-      event.target.value = "";
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "PNG素材を読み込めませんでした。");
     }
   }
 
-  function handleDownload(withText: boolean) {
+  function handleFiles(event: ChangeEvent<HTMLInputElement>) {
+    if (event.target.files) {
+      void addFiles(event.target.files);
+      event.target.value = "";
+    }
+  }
+
+  function handleDrop(event: DragEvent<HTMLLabelElement>) {
+    event.preventDefault();
+    setIsDragging(false);
+    void addFiles(event.dataTransfer.files);
+  }
+
+  function handleDownload(withText: boolean, pageIndex = selectedPage) {
     const canvas = renderCanvasRef.current;
     if (!canvas) return;
-    renderThumbnail({ withText });
-    downloadCanvas(canvas, title, withText ? "text" : "no-text");
+    renderThumbnail({ withText, pageIndex });
+    downloadCanvas(canvas, title, `${withText ? "text" : "no-text"}-page-${pageIndex + 1}`);
     renderThumbnail({ withText: true });
+  }
+
+  function handleDownloadAll(withText: boolean) {
+    for (let pageIndex = 0; pageIndex < pageCount; pageIndex += 1) {
+      window.setTimeout(() => handleDownload(withText, pageIndex), pageIndex * 250);
+    }
   }
 
   return (
@@ -639,17 +737,38 @@ export default function Home() {
               <span>1</span>
               <h2>PNG素材をアップロード</h2>
             </div>
-            <label className="fileDrop">
-              <span>PNG素材を選択</span>
-              <small>複数ファイルをまとめて追加できます</small>
-              <input type="file" accept="image/png" multiple onChange={handleFiles} />
+            <label
+              className={isDragging ? "fileDrop dragging" : "fileDrop"}
+              onDragEnter={(event) => {
+                event.preventDefault();
+                setIsDragging(true);
+              }}
+              onDragLeave={(event) => {
+                event.preventDefault();
+                setIsDragging(false);
+              }}
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={handleDrop}
+            >
+              <b>ここにPNG素材をドラッグ＆ドロップ</b>
+              <span>またはクリックしてファイルを選択</span>
+              <small>透明PNGを複数まとめて追加できます</small>
+              <input ref={fileInputRef} type="file" accept="image/png" multiple onChange={handleFiles} />
             </label>
             <div className="statsLine">
-              <span>{cliparts.length}点アップロード済み</span>
+              <span>アップロード済み素材：{cliparts.length}枚</span>
               <span>
-                表示 {visibleCliparts.length} / {activeGrid.columns * activeGrid.rows}
+                {pageCount}ページ / 1ページ{pageSize}枚
               </span>
             </div>
+            {cliparts.length > 0 ? (
+              <div className="assetPreviewGrid" aria-label="アップロード素材プレビュー">
+                {cliparts.slice(0, 24).map((clipart, index) => (
+                  <img key={clipart.id} src={clipart.previewUrl} alt={`素材 ${index + 1}`} title={clipart.name} />
+                ))}
+                {cliparts.length > 24 ? <span className="moreAssets">+{cliparts.length - 24}</span> : null}
+              </div>
+            ) : null}
             {error ? <p className="errorText">{error}</p> : null}
           </section>
 
@@ -691,7 +810,7 @@ export default function Home() {
           <section className="controlGroup">
             <div className="sectionTitle">
               <span>4</span>
-              <h2>文字とレイアウト</h2>
+              <h2>文字設定</h2>
             </div>
             <label>
               商品タイトル
@@ -703,15 +822,98 @@ export default function Home() {
             </label>
             <div className="twoColumn">
               <label>
-                PNG数
-                <input
-                  min="1"
-                  max="999"
-                  type="number"
-                  value={pngCount}
-                  onChange={(event) => setPngCount(Number(event.target.value))}
-                />
+                タイトルフォント
+                <select value={titleFontKey} onChange={(event) => setTitleFontKey(event.target.value as FontKey)}>
+                  {fontOptions.map((font) => (
+                    <option key={font.key} value={font.key}>
+                      {font.label} - {font.sample}
+                    </option>
+                  ))}
+                </select>
               </label>
+              <label>
+                サブタイトルフォント
+                <select value={subtitleFontKey} onChange={(event) => setSubtitleFontKey(event.target.value as FontKey)}>
+                  {fontOptions.map((font) => (
+                    <option key={font.key} value={font.key}>
+                      {font.label} - {font.sample}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <div className="fontPreviewGrid">
+              {fontOptions.map((font) => (
+                <button
+                  key={font.key}
+                  type="button"
+                  className={titleFontKey === font.key ? "fontPreview active" : "fontPreview"}
+                  onClick={() => setTitleFontKey(font.key)}
+                >
+                  <span>{font.label}</span>
+                  <b style={{ fontFamily: font.stack }}>{font.sample}</b>
+                </button>
+              ))}
+            </div>
+          </section>
+
+          <section className="controlGroup">
+            <div className="sectionTitle">
+              <span>5</span>
+              <h2>位置とサイズ</h2>
+            </div>
+            <div className="sliderStack">
+              <label>
+                <span>
+                  タイトルの上下位置 <b>{titleY}</b>
+                </span>
+                <input type="range" min="80" max="520" value={titleY} onChange={(event) => setTitleY(Number(event.target.value))} />
+              </label>
+              <label>
+                <span>
+                  タイトルの左右位置 <b>{titleX}</b>
+                </span>
+                <input type="range" min="-100" max="100" value={titleX} onChange={(event) => setTitleX(Number(event.target.value))} />
+              </label>
+              <label>
+                <span>
+                  タイトルの文字サイズ <b>{titleFontSize}px</b>
+                </span>
+                <input type="range" min="80" max="230" value={titleFontSize} onChange={(event) => setTitleFontSize(Number(event.target.value))} />
+              </label>
+              <label>
+                <span>
+                  サブタイトルの上下位置 <b>{subtitleY}</b>
+                </span>
+                <input type="range" min="170" max="720" value={subtitleY} onChange={(event) => setSubtitleY(Number(event.target.value))} />
+              </label>
+              <label>
+                <span>
+                  サブタイトルの左右位置 <b>{subtitleX}</b>
+                </span>
+                <input type="range" min="-100" max="100" value={subtitleX} onChange={(event) => setSubtitleX(Number(event.target.value))} />
+              </label>
+              <label>
+                <span>
+                  サブタイトルの文字サイズ <b>{subtitleFontSize}px</b>
+                </span>
+                <input type="range" min="30" max="110" value={subtitleFontSize} onChange={(event) => setSubtitleFontSize(Number(event.target.value))} />
+              </label>
+              <label>
+                <span>
+                  タイトルとサブタイトルの間隔 <b>{textGap}</b>
+                </span>
+                <input type="range" min="20" max="180" value={textGap} onChange={(event) => setTextGap(Number(event.target.value))} />
+              </label>
+            </div>
+          </section>
+
+          <section className="controlGroup">
+            <div className="sectionTitle">
+              <span>6</span>
+              <h2>素材レイアウト</h2>
+            </div>
+            <div className="twoColumn">
               <label>
                 レイアウト
                 <select value={layout} onChange={(event) => setLayout(event.target.value as LayoutOption)}>
@@ -722,48 +924,8 @@ export default function Home() {
                   ))}
                 </select>
               </label>
-            </div>
-            <div className="sliderStack">
               <label>
-                <span>
-                  素材サイズ <b>{clipartSize}%</b>
-                </span>
-                <input
-                  type="range"
-                  min="60"
-                  max="125"
-                  value={clipartSize}
-                  onChange={(event) => setClipartSize(Number(event.target.value))}
-                />
-              </label>
-              <label>
-                <span>
-                  横余白 <b>{horizontalSpacing}</b>
-                </span>
-                <input
-                  type="range"
-                  min="0"
-                  max="16"
-                  value={horizontalSpacing}
-                  onChange={(event) => setHorizontalSpacing(Number(event.target.value))}
-                />
-              </label>
-              <label>
-                <span>
-                  縦余白 <b>{verticalSpacing}</b>
-                </span>
-                <input
-                  type="range"
-                  min="0"
-                  max="16"
-                  value={verticalSpacing}
-                  onChange={(event) => setVerticalSpacing(Number(event.target.value))}
-                />
-              </label>
-              <label>
-                <span>
-                  タイトルエリア高さ <b>{topTitleArea}%</b>
-                </span>
+                タイトルエリア高さ
                 <input
                   type="range"
                   min="15"
@@ -771,6 +933,26 @@ export default function Home() {
                   value={topTitleArea}
                   onChange={(event) => setTopTitleArea(Number(event.target.value))}
                 />
+              </label>
+            </div>
+            <div className="sliderStack">
+              <label>
+                <span>
+                  素材サイズ <b>{clipartSize}%</b>
+                </span>
+                <input type="range" min="60" max="130" value={clipartSize} onChange={(event) => setClipartSize(Number(event.target.value))} />
+              </label>
+              <label>
+                <span>
+                  横余白 <b>{horizontalSpacing}</b>
+                </span>
+                <input type="range" min="0" max="16" value={horizontalSpacing} onChange={(event) => setHorizontalSpacing(Number(event.target.value))} />
+              </label>
+              <label>
+                <span>
+                  縦余白 <b>{verticalSpacing}</b>
+                </span>
+                <input type="range" min="0" max="16" value={verticalSpacing} onChange={(event) => setVerticalSpacing(Number(event.target.value))} />
               </label>
             </div>
           </section>
@@ -781,6 +963,12 @@ export default function Home() {
             </button>
             <button type="button" onClick={() => handleDownload(false)}>
               文字なし版をダウンロード
+            </button>
+            <button type="button" onClick={() => handleDownloadAll(true)}>
+              全ページ文字あり版
+            </button>
+            <button type="button" onClick={() => handleDownloadAll(false)}>
+              全ページ文字なし版
             </button>
           </section>
         </aside>
@@ -795,13 +983,49 @@ export default function Home() {
               {activeGrid.columns}×{activeGrid.rows}
             </span>
           </div>
+          <div className="pageControls">
+            <button type="button" disabled={selectedPage === 0} onClick={() => setSelectedPage((page) => page - 1)}>
+              前のページ
+            </button>
+            <strong>
+              Page {selectedPage + 1} / {pageCount}
+            </strong>
+            <button
+              type="button"
+              disabled={selectedPage >= pageCount - 1}
+              onClick={() => setSelectedPage((page) => page + 1)}
+            >
+              次のページ
+            </button>
+          </div>
+          <div className="pageJumpGrid">
+            {Array.from({ length: pageCount }, (_, index) => (
+              <button
+                key={index}
+                type="button"
+                className={selectedPage === index ? "active" : ""}
+                onClick={() => setSelectedPage(index)}
+              >
+                Page {index + 1}
+              </button>
+            ))}
+          </div>
           <div className="previewMeta">
+            <span>表示中：{currentPageAssets.length}枚</span>
+            <span>全素材をページ分割</span>
             <span>素材色は変更しません</span>
             <span>透明余白を自動トリミング</span>
-            <span>文字なし版は素材面積を大きく配置</span>
           </div>
           <div className="canvasFrame">
             <canvas ref={previewRef} width={PREVIEW_SIZE} height={PREVIEW_SIZE} aria-label="サムネイルプレビュー" />
+          </div>
+          <div className="currentPageDownloads">
+            <button type="button" onClick={() => handleDownload(true)}>
+              現在のページをダウンロード
+            </button>
+            <button type="button" onClick={() => handleDownload(false)}>
+              現在のページを文字なしでダウンロード
+            </button>
           </div>
         </section>
       </section>
