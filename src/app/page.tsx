@@ -41,7 +41,7 @@ type AssetSource = "new" | "uploaded";
 type TopStyle = "centerText" | "fullCollage" | "cleanSpace" | "playfulPop";
 type PanelShape = "square" | "circle";
 type ClipartDensity = "low" | "normal" | "high";
-type ClipartPlacement = "circle" | "corners" | "topBottom" | "random" | "aligned";
+type ClipartPlacement = "auto" | "bestseller" | "grid" | "ring" | "collage" | "random";
 
 type Rgb = {
   r: number;
@@ -123,11 +123,12 @@ const densityOptions: Array<{ label: string; value: ClipartDensity }> = [
 ];
 
 const placementOptions: Array<{ label: string; value: ClipartPlacement }> = [
-  { label: "円形配置", value: "circle" },
-  { label: "四隅配置", value: "corners" },
-  { label: "上下配置", value: "topBottom" },
-  { label: "ランダム配置", value: "random" },
-  { label: "整列配置", value: "aligned" }
+  { label: "自動おすすめ配置", value: "auto" },
+  { label: "Etsyベストセラー風", value: "bestseller" },
+  { label: "グリッド配置", value: "grid" },
+  { label: "円形配置", value: "ring" },
+  { label: "コラージュ配置", value: "collage" },
+  { label: "ランダム配置", value: "random" }
 ];
 
 const fontOptions: FontOption[] = [
@@ -651,8 +652,125 @@ type Rect = {
   height: number;
 };
 
+type PlacementPoint = {
+  x: number;
+  y: number;
+  scale: number;
+};
+
 function rectsOverlap(a: Rect, b: Rect) {
   return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
+}
+
+function resolveTopPlacement(placement: ClipartPlacement, assetCount: number): Exclude<ClipartPlacement, "auto"> {
+  if (placement !== "auto") return placement;
+  if (assetCount <= 12) return "grid";
+  if (assetCount <= 30) return "ring";
+  return "bestseller";
+}
+
+function shufflePoints(points: PlacementPoint[], random: () => number) {
+  const shuffled = [...points];
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(random() * (index + 1));
+    [shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]];
+  }
+  return shuffled;
+}
+
+function createTopPlacementPoints(
+  placement: Exclude<ClipartPlacement, "auto">,
+  count: number,
+  centerX: number,
+  centerY: number,
+  safeArea: Rect,
+  random: () => number
+) {
+  const points: PlacementPoint[] = [];
+  const safeCenterX = safeArea.x + safeArea.width / 2;
+  const safeCenterY = safeArea.y + safeArea.height / 2;
+  const ringRadiusX = Math.max(safeArea.width / 2 + 390, 1030);
+  const ringRadiusY = Math.max(safeArea.height / 2 + 330, 840);
+
+  if (placement === "bestseller") {
+    const anchors: PlacementPoint[] = [
+      { x: 360, y: 360, scale: 1.18 },
+      { x: DESIGN_SIZE - 360, y: 360, scale: 1.16 },
+      { x: 380, y: DESIGN_SIZE - 360, scale: 1.14 },
+      { x: DESIGN_SIZE - 380, y: DESIGN_SIZE - 360, scale: 1.12 },
+      { x: 260, y: DESIGN_SIZE / 2, scale: 0.96 },
+      { x: DESIGN_SIZE - 260, y: DESIGN_SIZE / 2, scale: 0.96 },
+      { x: DESIGN_SIZE / 2, y: 250, scale: 0.9 },
+      { x: DESIGN_SIZE / 2, y: DESIGN_SIZE - 250, scale: 0.9 }
+    ];
+    points.push(...anchors);
+    for (let index = anchors.length; index < count + 10; index += 1) {
+      const angle = (Math.PI * 2 * index) / Math.max(1, count + 6);
+      points.push({
+        x: safeCenterX + Math.cos(angle) * (ringRadiusX + (random() - 0.5) * 280),
+        y: safeCenterY + Math.sin(angle) * (ringRadiusY + (random() - 0.5) * 220),
+        scale: 0.72 + random() * 0.24
+      });
+    }
+    return points;
+  }
+
+  if (placement === "ring") {
+    for (let index = 0; index < count + 8; index += 1) {
+      const angle = (-Math.PI / 2) + (Math.PI * 2 * index) / Math.max(1, count + 2);
+      points.push({
+        x: safeCenterX + Math.cos(angle) * ringRadiusX,
+        y: safeCenterY + Math.sin(angle) * ringRadiusY,
+        scale: 0.86 + (index % 3) * 0.06
+      });
+    }
+    return points;
+  }
+
+  if (placement === "grid") {
+    const columns = count <= 6 ? 3 : count <= 12 ? 4 : 5;
+    const rows = Math.ceil((count + 4) / columns);
+    const startX = 350;
+    const startY = 350;
+    const usableWidth = DESIGN_SIZE - startX * 2;
+    const usableHeight = DESIGN_SIZE - startY * 2;
+    for (let row = 0; row < rows; row += 1) {
+      for (let column = 0; column < columns; column += 1) {
+        points.push({
+          x: startX + (usableWidth * column) / Math.max(1, columns - 1),
+          y: startY + (usableHeight * row) / Math.max(1, rows - 1),
+          scale: 0.98
+        });
+      }
+    }
+    return points
+      .filter((point) => !rectsOverlap({ x: point.x - 220, y: point.y - 220, width: 440, height: 440 }, safeArea))
+      .sort((a, b) => Math.hypot(a.x - centerX, a.y - centerY) - Math.hypot(b.x - centerX, b.y - centerY));
+  }
+
+  if (placement === "collage") {
+    const columns = 6;
+    const rows = 6;
+    for (let row = 0; row < rows; row += 1) {
+      for (let column = 0; column < columns; column += 1) {
+        points.push({
+          x: 230 + (column * (DESIGN_SIZE - 460)) / (columns - 1) + (random() - 0.5) * 160,
+          y: 230 + (row * (DESIGN_SIZE - 460)) / (rows - 1) + (random() - 0.5) * 160,
+          scale: 0.62 + random() * 0.28
+        });
+      }
+    }
+    return shufflePoints(points, random);
+  }
+
+  for (let index = 0; index < count + 16; index += 1) {
+    points.push({
+      x: 180 + random() * (DESIGN_SIZE - 360),
+      y: 180 + random() * (DESIGN_SIZE - 360),
+      scale: 0.72 + random() * 0.46
+    });
+  }
+  return points;
 }
 
 function downloadCanvas(canvas: HTMLCanvasElement, title: string, suffix: string, format: ExportFormat) {
@@ -700,7 +818,7 @@ export default function Home() {
   const [topSmallTextSize, setTopSmallTextSize] = useState(54);
   const [topSmallTextY, setTopSmallTextY] = useState(250);
   const [topSmallTextX, setTopSmallTextX] = useState(0);
-  const [clipartPlacement, setClipartPlacement] = useState<ClipartPlacement>("circle");
+  const [clipartPlacement, setClipartPlacement] = useState<ClipartPlacement>("auto");
   const [topClipartSize, setTopClipartSize] = useState(500);
   const [topClipartVariation, setTopClipartVariation] = useState(45);
   const [clipartDistance, setClipartDistance] = useState(70);
@@ -868,11 +986,20 @@ export default function Home() {
         context.fillText(subtitle, safeSubtitleX, safeSubtitleY);
       }
 
+      const visibleColumns = pageAssets.length > 0
+        ? Math.min(activeGrid.columns, Math.max(1, Math.ceil(Math.sqrt(pageAssets.length * activeGrid.columns / activeGrid.rows))))
+        : activeGrid.columns;
+      const visibleRows = pageAssets.length > 0 ? Math.ceil(pageAssets.length / visibleColumns) : activeGrid.rows;
+      const centeredBlockHeight = visibleRows * cellHeight + Math.max(0, visibleRows - 1) * rowGap;
+      const centeredStartY = gridTop + (gridHeight - centeredBlockHeight) / 2;
+
       pageAssets.forEach((clipart, index) => {
-        const column = index % activeGrid.columns;
-        const row = Math.floor(index / activeGrid.columns);
-        const cellX = margin + column * (cellWidth + columnGap);
-        const cellY = gridTop + row * (cellHeight + rowGap);
+        const row = Math.floor(index / visibleColumns);
+        const column = index % visibleColumns;
+        const itemsInRow = Math.min(visibleColumns, pageAssets.length - row * visibleColumns);
+        const rowWidth = itemsInRow * cellWidth + Math.max(0, itemsInRow - 1) * columnGap;
+        const cellX = margin + (gridWidth - rowWidth) / 2 + column * (cellWidth + columnGap);
+        const cellY = centeredStartY + row * (cellHeight + rowGap);
         const maxDrawWidth = cellWidth * sizeMultiplier;
         const maxDrawHeight = cellHeight * sizeMultiplier;
         const ratio = Math.min(maxDrawWidth / clipart.trimmedWidth, maxDrawHeight / clipart.trimmedHeight);
@@ -934,8 +1061,9 @@ export default function Home() {
 
       const random = seededRandom(topSeed);
       const sourceAssets = assetSource === "uploaded" ? cliparts : cliparts;
-      const densityCount = clipartDensity === "low" ? 10 : clipartDensity === "high" ? 24 : 16;
+      const densityCount = clipartDensity === "low" ? 12 : clipartDensity === "high" ? 40 : 24;
       const assets = sourceAssets.slice(0, Math.max(1, Math.min(sourceAssets.length, densityCount)));
+      const resolvedPlacement = resolveTopPlacement(clipartPlacement, sourceAssets.length);
       const panelFill = `rgba(255, 255, 255, ${topStyle === "fullCollage" ? 0.9 : 0.82})`;
       const panelStroke = rgbToHex(mix(accentColor, hexToRgb("#ffffff"), 0.35));
       const blockCenterX = DESIGN_SIZE / 2 + textBlockX * 10;
@@ -969,44 +1097,42 @@ export default function Home() {
       }
 
       const placedRects: Rect[] = [];
+      const placementPoints = createTopPlacementPoints(
+        resolvedPlacement,
+        assets.length,
+        blockCenterX,
+        blockCenterY,
+        safeArea,
+        random
+      );
+      let placementCursor = 0;
 
       assets.forEach((clipart, index) => {
-        const styleBoost = topStyle === "playfulPop" ? 1.18 : topStyle === "cleanSpace" ? 0.82 : 1;
+        const styleBoost = topStyle === "playfulPop" ? 1.12 : topStyle === "cleanSpace" ? 0.84 : 1;
+        const templateBoost =
+          resolvedPlacement === "bestseller" && index < 4
+            ? 1.2
+            : resolvedPlacement === "grid"
+              ? 1.08
+              : resolvedPlacement === "collage"
+                ? 0.78
+                : 1;
         const variation = 1 - topClipartVariation / 200 + random() * (topClipartVariation / 100);
-        const baseSize = topClipartSize * styleBoost * variation;
-        const ratio = Math.min(baseSize / clipart.trimmedWidth, baseSize / clipart.trimmedHeight);
-        const drawWidth = clipart.trimmedWidth * ratio;
-        const drawHeight = clipart.trimmedHeight * ratio;
-        let chosen: { x: number; y: number } | null = null;
+        const baseSize = topClipartSize * styleBoost * templateBoost * variation;
+        let chosen: { x: number; y: number; drawWidth: number; drawHeight: number } | null = null;
 
-        for (let attempt = 0; attempt < 90; attempt += 1) {
-          const angle = clipartPlacement === "random" ? random() * Math.PI * 2 : (Math.PI * 2 * index) / Math.max(1, assets.length);
-          let x = DESIGN_SIZE / 2;
-          let y = DESIGN_SIZE / 2;
-
-          if (clipartPlacement === "circle") {
-            const radius = Math.max(frameW, frameH) * 0.62 + clipartDistance + random() * 260;
-            x = blockCenterX + Math.cos(angle + attempt * 0.13) * radius;
-            y = blockCenterY + Math.sin(angle + attempt * 0.13) * radius;
-          } else if (clipartPlacement === "corners") {
-            const corner = (index + attempt) % 4;
-            x = corner < 2 ? 250 + random() * 720 : DESIGN_SIZE - 250 - random() * 720;
-            y = corner === 0 || corner === 2 ? 250 + random() * 720 : DESIGN_SIZE - 250 - random() * 720;
-          } else if (clipartPlacement === "topBottom") {
-            x = 240 + random() * (DESIGN_SIZE - 480);
-            y = index % 2 === 0 ? 210 + random() * 620 : DESIGN_SIZE - 210 - random() * 620;
-          } else if (clipartPlacement === "aligned") {
-            const columns = Math.ceil(Math.sqrt(assets.length));
-            const rows = Math.ceil(assets.length / columns);
-            const col = index % columns;
-            const row = Math.floor(index / columns);
-            x = 260 + (col * (DESIGN_SIZE - 520)) / Math.max(1, columns - 1);
-            y = 260 + (row * (DESIGN_SIZE - 520)) / Math.max(1, rows - 1);
-          } else {
-            x = 160 + random() * (DESIGN_SIZE - 320);
-            y = 160 + random() * (DESIGN_SIZE - 320);
-          }
-
+        for (let attempt = 0; attempt < Math.max(120, placementPoints.length); attempt += 1) {
+          const point = placementPoints[(placementCursor + attempt) % Math.max(1, placementPoints.length)] ?? {
+            x: 180 + random() * (DESIGN_SIZE - 360),
+            y: 180 + random() * (DESIGN_SIZE - 360),
+            scale: 1
+          };
+          const pointSize = baseSize * point.scale;
+          const ratio = Math.min(pointSize / clipart.trimmedWidth, pointSize / clipart.trimmedHeight);
+          const drawWidth = clipart.trimmedWidth * ratio;
+          const drawHeight = clipart.trimmedHeight * ratio;
+          let x = point.x + (resolvedPlacement === "random" || resolvedPlacement === "collage" ? (random() - 0.5) * 150 : 0);
+          let y = point.y + (resolvedPlacement === "random" || resolvedPlacement === "collage" ? (random() - 0.5) * 150 : 0);
           x = clamp(x, drawWidth / 2 + 40, DESIGN_SIZE - drawWidth / 2 - 40);
           y = clamp(y, drawHeight / 2 + 40, DESIGN_SIZE - drawHeight / 2 - 40);
           const rect: Rect = {
@@ -1015,10 +1141,13 @@ export default function Home() {
             width: drawWidth + clipartDistance,
             height: drawHeight + clipartDistance
           };
+          const softOverlapAllowed = resolvedPlacement === "collage" && attempt > 36;
+          const overlapIsOk = softOverlapAllowed || placedRects.every((placed) => !rectsOverlap(rect, placed));
 
-          if (!rectsOverlap(rect, safeArea) && placedRects.every((placed) => !rectsOverlap(rect, placed))) {
+          if (!rectsOverlap(rect, safeArea) && overlapIsOk) {
             placedRects.push(rect);
-            chosen = { x, y };
+            chosen = { x, y, drawWidth, drawHeight };
+            placementCursor = placementCursor + attempt + 1;
             break;
           }
         }
@@ -1028,7 +1157,13 @@ export default function Home() {
         context.save();
         context.translate(chosen.x, chosen.y);
         context.rotate((random() - 0.5) * (topStyle === "cleanSpace" ? 0.25 : 0.55));
-        context.drawImage(clipart.trimmedCanvas, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
+        context.drawImage(
+          clipart.trimmedCanvas,
+          -chosen.drawWidth / 2,
+          -chosen.drawHeight / 2,
+          chosen.drawWidth,
+          chosen.drawHeight
+        );
         context.restore();
       });
 
@@ -1639,9 +1774,6 @@ export default function Home() {
                   </button>
                 ))}
               </div>
-              <button className="utilityButton" type="button" onClick={() => setTopSeed(Date.now())}>
-                配置をシャッフル
-              </button>
             </section>
 
             <section className="controlGroup">
@@ -1825,7 +1957,7 @@ export default function Home() {
                 <h2>素材配置</h2>
               </div>
               <label>
-                素材配置スタイル
+                配置スタイル
                 <select value={clipartPlacement} onChange={(event) => setClipartPlacement(event.target.value as ClipartPlacement)}>
                   {placementOptions.map((option) => (
                     <option key={option.value} value={option.value}>{option.label}</option>
@@ -1846,8 +1978,8 @@ export default function Home() {
                 </button>
               </div>
               <div className="sliderStack">
-                <label><span>素材全体サイズ <b>{topClipartSize}</b></span><input type="range" min="220" max="820" value={topClipartSize} onChange={(event) => setTopClipartSize(Number(event.target.value))} /></label>
-                <label><span>ランダムサイズ変化 <b>{topClipartVariation}%</b></span><input type="range" min="0" max="90" value={topClipartVariation} onChange={(event) => setTopClipartVariation(Number(event.target.value))} /></label>
+                <label><span>素材サイズ <b>{topClipartSize}</b></span><input type="range" min="220" max="820" value={topClipartSize} onChange={(event) => setTopClipartSize(Number(event.target.value))} /></label>
+                <label><span>ランダムサイズ差 <b>{topClipartVariation}%</b></span><input type="range" min="0" max="90" value={topClipartVariation} onChange={(event) => setTopClipartVariation(Number(event.target.value))} /></label>
                 <label><span>素材同士の距離 <b>{clipartDistance}</b></span><input type="range" min="20" max="220" value={clipartDistance} onChange={(event) => setClipartDistance(Number(event.target.value))} /></label>
               </div>
             </section>
@@ -1923,14 +2055,21 @@ export default function Home() {
           </div>
           <div className="previewMeta">
             <span>{creationMode === "grid" ? `表示中：${currentPageAssets.length}枚` : `使用素材：${cliparts.length}枚`}</span>
-            <span className="gridOnly">全素材をページ分割</span>
-            <span>{creationMode === "grid" ? "選択ページを保存" : "Etsyトップ画像向け"}</span>
-            <span>素材色は変更しません</span>
-            <span>透明余白を自動トリミング</span>
+            {creationMode === "top" ? <span>Etsyトップ画像向け</span> : null}
           </div>
           <div className="canvasFrame">
             <canvas ref={previewRef} width={PREVIEW_SIZE} height={PREVIEW_SIZE} aria-label="サムネイルプレビュー" />
           </div>
+          {creationMode === "grid" ? (
+            <div className="currentPageDownloads">
+              <button type="button" onClick={() => handleDownload(true)}>
+                現在のページを文字ありで保存
+              </button>
+              <button type="button" onClick={() => handleDownload(false)}>
+                現在のページを文字なしで保存
+              </button>
+            </div>
+          ) : null}
         </section>
       </section>
 
