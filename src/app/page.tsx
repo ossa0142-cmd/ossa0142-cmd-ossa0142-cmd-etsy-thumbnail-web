@@ -36,6 +36,11 @@ type FontKey =
 type PaletteKey = "soft" | "vivid" | "natural";
 type ExportSize = 1000 | 2000 | 3000;
 type ExportFormat = "png" | "jpg";
+type CreationMode = "grid" | "top";
+type AssetSource = "new" | "uploaded";
+type TopStyle = "centerText" | "fullCollage" | "cleanSpace" | "playfulPop";
+type PanelShape = "rectangle" | "rounded" | "scallop";
+type ClipartDensity = "low" | "normal" | "high";
 
 type Rgb = {
   r: number;
@@ -96,6 +101,25 @@ const exportSizeOptions: Array<{ label: string; value: ExportSize }> = [
 const exportFormatOptions: Array<{ label: string; value: ExportFormat }> = [
   { label: "PNG", value: "png" },
   { label: "JPG", value: "jpg" }
+];
+
+const topStyleOptions: Array<{ label: string; value: TopStyle; description: string }> = [
+  { label: "中央テキスト型", value: "centerText", description: "素材を周囲に配置して中央に大きな文字" },
+  { label: "コラージュ全面型", value: "fullCollage", description: "全面コラージュに白パネルを重ねる" },
+  { label: "余白きれい型", value: "cleanSpace", description: "角に素材を寄せた上品ミニマル" },
+  { label: "にぎやかポップ型", value: "playfulPop", description: "大きめ素材を楽しく散らす" }
+];
+
+const panelShapeOptions: Array<{ label: string; value: PanelShape }> = [
+  { label: "rectangle", value: "rectangle" },
+  { label: "rounded rectangle", value: "rounded" },
+  { label: "scallop style", value: "scallop" }
+];
+
+const densityOptions: Array<{ label: string; value: ClipartDensity }> = [
+  { label: "少なめ", value: "low" },
+  { label: "普通", value: "normal" },
+  { label: "多め", value: "high" }
 ];
 
 const fontOptions: FontOption[] = [
@@ -574,6 +598,53 @@ function drawWrappedText(
   });
 }
 
+function seededRandom(seed: number) {
+  let value = seed % 2147483647;
+  if (value <= 0) value += 2147483646;
+
+  return () => {
+    value = (value * 16807) % 2147483647;
+    return (value - 1) / 2147483646;
+  };
+}
+
+function drawPanel(
+  context: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  shape: PanelShape,
+  fill: string,
+  stroke: string
+) {
+  context.fillStyle = fill;
+  context.strokeStyle = stroke;
+  context.lineWidth = 8;
+
+  if (shape === "scallop") {
+    const radius = 46;
+    context.beginPath();
+    context.roundRect(x, y, width, height, 92);
+    context.fill();
+    for (let dotX = x + radius; dotX < x + width; dotX += radius * 1.55) {
+      context.beginPath();
+      context.arc(dotX, y, radius, 0, Math.PI * 2);
+      context.fill();
+      context.beginPath();
+      context.arc(dotX, y + height, radius, 0, Math.PI * 2);
+      context.fill();
+    }
+    context.strokeRect(x + 26, y + 26, width - 52, height - 52);
+    return;
+  }
+
+  context.beginPath();
+  context.roundRect(x, y, width, height, shape === "rounded" ? 92 : 12);
+  context.fill();
+  context.stroke();
+}
+
 function downloadCanvas(canvas: HTMLCanvasElement, title: string, suffix: string, format: ExportFormat) {
   const fileTitle = title.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
   const link = document.createElement("a");
@@ -587,8 +658,21 @@ export default function Home() {
   const previewRef = useRef<HTMLCanvasElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [cliparts, setCliparts] = useState<UploadedClipart[]>([]);
+  const [creationMode, setCreationMode] = useState<CreationMode>("grid");
   const [title, setTitle] = useState("Watercolor Baby Clipart");
   const [subtitle, setSubtitle] = useState(DEFAULT_SUBTITLE);
+  const [topTitle, setTopTitle] = useState("Cute Clipart Bundle");
+  const [topSubtitle, setTopSubtitle] = useState("COMMERCIAL LICENSE INCLUDED");
+  const [topSmallText, setTopSmallText] = useState("PNG CLIPART SET");
+  const [topBadgeText, setTopBadgeText] = useState("NEW");
+  const [assetSource, setAssetSource] = useState<AssetSource>("uploaded");
+  const [topStyle, setTopStyle] = useState<TopStyle>("centerText");
+  const [topTitleFontKey, setTopTitleFontKey] = useState<FontKey>("bold");
+  const [topSubtitleFontKey, setTopSubtitleFontKey] = useState<FontKey>("cute");
+  const [topPanelEnabled, setTopPanelEnabled] = useState(true);
+  const [topPanelShape, setTopPanelShape] = useState<PanelShape>("rounded");
+  const [clipartDensity, setClipartDensity] = useState<ClipartDensity>("normal");
+  const [topSeed, setTopSeed] = useState(20260603);
   const [presetKey, setPresetKey] = useState<PresetKey>("watercolorBaby");
   const [titleFontKey, setTitleFontKey] = useState<FontKey>("baby");
   const [subtitleFontKey, setSubtitleFontKey] = useState<FontKey>("handwritten");
@@ -625,6 +709,8 @@ export default function Home() {
   );
   const titleFont = getFont(titleFontKey);
   const subtitleFont = getFont(subtitleFontKey);
+  const topTitleFont = getFont(topTitleFontKey);
+  const topSubtitleFont = getFont(topSubtitleFontKey);
   const extractedColors = useMemo(() => {
     const palette: Rgb[] = [];
     for (const clipart of cliparts) {
@@ -663,14 +749,14 @@ export default function Home() {
   useEffect(() => {
     let isActive = true;
 
-    void ensureCanvasFonts([titleFont, subtitleFont]).then(() => {
+    void ensureCanvasFonts([titleFont, subtitleFont, topTitleFont, topSubtitleFont]).then(() => {
       if (isActive) setFontLoadTick((tick) => tick + 1);
     });
 
     return () => {
       isActive = false;
     };
-  }, [subtitleFont, titleFont]);
+  }, [subtitleFont, titleFont, topSubtitleFont, topTitleFont]);
 
   const renderThumbnail = useCallback(
     (
@@ -804,9 +890,157 @@ export default function Home() {
     ]
   );
 
+  const renderTopThumbnail = useCallback(
+    (options: { targetCanvas?: HTMLCanvasElement; outputSize?: number } = {}) => {
+      const canvas = options.targetCanvas ?? renderCanvasRef.current;
+      if (!canvas) return;
+
+      const outputSize = options.outputSize ?? DESIGN_SIZE;
+      const context = prepareCanvas(canvas, outputSize);
+      if (!context) return;
+
+      const random = seededRandom(topSeed);
+      const sourceAssets = assetSource === "uploaded" ? cliparts : cliparts;
+      const densityCount = clipartDensity === "low" ? 10 : clipartDensity === "high" ? 24 : 16;
+      const assets = sourceAssets.slice(0, Math.max(1, Math.min(sourceAssets.length, densityCount)));
+      const panelFill = `rgba(255, 255, 255, ${topStyle === "fullCollage" ? 0.9 : 0.82})`;
+      const panelStroke = rgbToHex(mix(accentColor, hexToRgb("#ffffff"), 0.35));
+
+      context.clearRect(0, 0, DESIGN_SIZE, DESIGN_SIZE);
+      context.fillStyle = "#ffffff";
+      context.fillRect(0, 0, DESIGN_SIZE, DESIGN_SIZE);
+      context.fillStyle = topStyle === "playfulPop" ? "#fffdf5" : activePreset.background;
+      context.fillRect(0, 0, DESIGN_SIZE, DESIGN_SIZE);
+
+      if (assets.length === 0) {
+        context.fillStyle = "#d8d1c8";
+        context.font = `800 96px ${topSubtitleFont.stack}`;
+        context.textAlign = "center";
+        context.fillText("PNG素材をアップロードしてください", DESIGN_SIZE / 2, DESIGN_SIZE / 2);
+      }
+
+      assets.forEach((clipart, index) => {
+        const angle = random() * Math.PI * 2;
+        const styleBoost = topStyle === "playfulPop" ? 1.25 : topStyle === "cleanSpace" ? 0.82 : 1;
+        const baseSize = (topStyle === "fullCollage" ? 620 : 500) * styleBoost * (0.78 + random() * 0.55);
+        let x = DESIGN_SIZE / 2;
+        let y = DESIGN_SIZE / 2;
+
+        if (topStyle === "centerText") {
+          const radius = 1050 + random() * 330;
+          x = DESIGN_SIZE / 2 + Math.cos(angle) * radius;
+          y = DESIGN_SIZE / 2 + Math.sin(angle) * radius;
+        } else if (topStyle === "fullCollage") {
+          x = 180 + random() * (DESIGN_SIZE - 360);
+          y = 180 + random() * (DESIGN_SIZE - 360);
+        } else if (topStyle === "cleanSpace") {
+          const corner = index % 4;
+          x = corner < 2 ? 340 + random() * 520 : DESIGN_SIZE - 340 - random() * 520;
+          y = corner === 0 || corner === 2 ? 330 + random() * 480 : DESIGN_SIZE - 330 - random() * 480;
+        } else {
+          const radius = 780 + random() * 720;
+          x = DESIGN_SIZE / 2 + Math.cos(angle) * radius;
+          y = DESIGN_SIZE / 2 + Math.sin(angle) * radius;
+        }
+
+        const ratio = Math.min(baseSize / clipart.trimmedWidth, baseSize / clipart.trimmedHeight);
+        const drawWidth = clipart.trimmedWidth * ratio;
+        const drawHeight = clipart.trimmedHeight * ratio;
+        context.save();
+        context.translate(clamp(x, 120, DESIGN_SIZE - 120), clamp(y, 120, DESIGN_SIZE - 120));
+        context.rotate((random() - 0.5) * (topStyle === "cleanSpace" ? 0.25 : 0.55));
+        context.drawImage(clipart.trimmedCanvas, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
+        context.restore();
+      });
+
+      const panelWidth = topStyle === "cleanSpace" ? 1760 : topStyle === "fullCollage" ? 1900 : 1680;
+      const panelHeight = topStyle === "playfulPop" ? 900 : 780;
+      const panelX = (DESIGN_SIZE - panelWidth) / 2;
+      const panelY = (DESIGN_SIZE - panelHeight) / 2;
+
+      if (topPanelEnabled || topStyle === "fullCollage") {
+        drawPanel(context, panelX, panelY, panelWidth, panelHeight, topPanelShape, panelFill, panelStroke);
+      }
+
+      context.textAlign = "center";
+      context.textBaseline = "middle";
+
+      const titleSize = fitFontSize(
+        context,
+        topTitle,
+        topTitleFont,
+        topStyle === "playfulPop" ? 245 : 215,
+        76,
+        panelWidth - 220
+      );
+      context.font = `${topTitleFont.weight} ${titleSize}px ${topTitleFont.stack}`;
+      context.fillStyle = rgbToHex(titleColor);
+      drawWrappedText(context, topTitle, DESIGN_SIZE / 2, DESIGN_SIZE / 2 - 145, panelWidth - 220, titleSize * 1.03, 2);
+
+      const subtitleSize = fitFontSize(context, topSubtitle, topSubtitleFont, 88, 34, panelWidth - 260);
+      context.font = `${topSubtitleFont.weight} ${subtitleSize}px ${topSubtitleFont.stack}`;
+      context.fillStyle = rgbToHex(subtitleColor);
+      context.fillText(topSubtitle, DESIGN_SIZE / 2, DESIGN_SIZE / 2 + 135);
+
+      if (topSmallText.trim()) {
+        context.font = `800 54px ${topSubtitleFont.stack}`;
+        context.fillStyle = rgbToHex(mix(subtitleColor, hexToRgb("#171514"), 0.22));
+        context.fillText(topSmallText, DESIGN_SIZE / 2, DESIGN_SIZE / 2 + 250);
+      }
+
+      if (topBadgeText.trim()) {
+        const badgeColor = accentColor;
+        const badgeX = panelX + panelWidth - 250;
+        const badgeY = panelY + 115;
+        context.fillStyle = rgbToHex(badgeColor);
+        context.beginPath();
+        context.roundRect(badgeX - 175, badgeY - 70, 350, 140, 70);
+        context.fill();
+        context.fillStyle = "#ffffff";
+        context.font = `900 58px ${topSubtitleFont.stack}`;
+        context.fillText(topBadgeText, badgeX, badgeY + 3);
+      }
+
+      const preview = previewRef.current;
+      if (preview && !options.targetCanvas) {
+        const previewContext = preview.getContext("2d");
+        if (!previewContext) return;
+        previewContext.imageSmoothingEnabled = true;
+        previewContext.imageSmoothingQuality = "high";
+        previewContext.setTransform(1, 0, 0, 1, 0, 0);
+        previewContext.clearRect(0, 0, PREVIEW_SIZE, PREVIEW_SIZE);
+        previewContext.drawImage(canvas, 0, 0, PREVIEW_SIZE, PREVIEW_SIZE);
+      }
+    },
+    [
+      accentColor,
+      activePreset.background,
+      assetSource,
+      clipartDensity,
+      cliparts,
+      fontLoadTick,
+      subtitleColor,
+      titleColor,
+      topBadgeText,
+      topPanelEnabled,
+      topPanelShape,
+      topSeed,
+      topSmallText,
+      topStyle,
+      topSubtitle,
+      topSubtitleFont,
+      topTitle,
+      topTitleFont
+    ]
+  );
+
   useEffect(() => {
-    renderThumbnail({ withText: true });
-  }, [renderThumbnail]);
+    if (creationMode === "grid") {
+      renderThumbnail({ withText: true });
+    } else {
+      renderTopThumbnail();
+    }
+  }, [creationMode, renderThumbnail, renderTopThumbnail]);
 
   async function addFiles(fileList: FileList | File[]) {
     const files = Array.from(fileList).filter((file) => file.type === "image/png" || file.name.endsWith(".png"));
@@ -859,7 +1093,17 @@ export default function Home() {
     const canvas = renderCanvasRef.current;
     if (!canvas) return;
     await ensureCanvasFonts([titleFont, subtitleFont]);
-    renderThumbnail({ withText, pageIndex, outputSize: exportSize });
+    const highResCanvas = document.createElement("canvas");
+    renderThumbnail({ withText, pageIndex, targetCanvas: highResCanvas, outputSize: exportSize * 2 });
+    canvas.width = exportSize;
+    canvas.height = exportSize;
+    const context = canvas.getContext("2d");
+    if (!context) return;
+    context.imageSmoothingEnabled = true;
+    context.imageSmoothingQuality = "high";
+    context.fillStyle = "#ffffff";
+    context.fillRect(0, 0, exportSize, exportSize);
+    context.drawImage(highResCanvas, 0, 0, exportSize, exportSize);
     downloadCanvas(
       canvas,
       title,
@@ -869,6 +1113,25 @@ export default function Home() {
     renderThumbnail({ withText: true });
   }
 
+  async function handleTopDownload() {
+    const canvas = renderCanvasRef.current;
+    if (!canvas) return;
+    await ensureCanvasFonts([topTitleFont, topSubtitleFont]);
+    const highResCanvas = document.createElement("canvas");
+    renderTopThumbnail({ targetCanvas: highResCanvas, outputSize: exportSize * 2 });
+    canvas.width = exportSize;
+    canvas.height = exportSize;
+    const context = canvas.getContext("2d");
+    if (!context) return;
+    context.imageSmoothingEnabled = true;
+    context.imageSmoothingQuality = "high";
+    context.fillStyle = "#ffffff";
+    context.fillRect(0, 0, exportSize, exportSize);
+    context.drawImage(highResCanvas, 0, 0, exportSize, exportSize);
+    downloadCanvas(canvas, topTitle, `top-thumbnail-${exportSize}px`, exportFormat);
+    renderTopThumbnail();
+  }
+
   function handleDownloadAll(withText: boolean) {
     for (let pageIndex = 0; pageIndex < pageCount; pageIndex += 1) {
       window.setTimeout(() => void handleDownload(withText, pageIndex), pageIndex * 300);
@@ -876,7 +1139,10 @@ export default function Home() {
   }
 
   return (
-    <main className="appShell" style={appThemeStyle}>
+    <main
+      className={creationMode === "grid" ? "appShell gridModeActive" : "appShell topModeActive"}
+      style={appThemeStyle}
+    >
       <section className="heroBar">
         <div>
           <p className="eyebrow">日本語 Etsy セラー向けサムネイル作成ツール</p>
@@ -888,8 +1154,27 @@ export default function Home() {
         </div>
       </section>
 
+      <section className="modeSelector" aria-label="作成モード">
+        <span>作成モード</span>
+        <button
+          type="button"
+          className={creationMode === "grid" ? "active" : ""}
+          onClick={() => setCreationMode("grid")}
+        >
+          一覧サムネイル
+        </button>
+        <button
+          type="button"
+          className={creationMode === "top" ? "active" : ""}
+          onClick={() => setCreationMode("top")}
+        >
+          トップサムネイル
+        </button>
+      </section>
+
       <section className="workspace">
         <aside className="controls" aria-label="サムネイル設定">
+          <div className="gridControls">
           <section className="controlGroup">
             <div className="sectionTitle">
               <span>1</span>
@@ -1169,16 +1454,231 @@ export default function Home() {
               全ページを文字なしで保存
             </button>
           </section>
+          </div>
+
+          <div className="topControls">
+            <section className="controlGroup">
+              <div className="sectionTitle">
+                <span>1</span>
+                <h2>素材の選択方法</h2>
+              </div>
+              <div className="modeButtonRow">
+                <button
+                  type="button"
+                  className={assetSource === "new" ? "active" : ""}
+                  onClick={() => setAssetSource("new")}
+                >
+                  新しく素材をアップロード
+                </button>
+                <button
+                  type="button"
+                  className={assetSource === "uploaded" ? "active" : ""}
+                  onClick={() => setAssetSource("uploaded")}
+                >
+                  アップロード済み素材からランダム生成
+                </button>
+              </div>
+              <label
+                className={isDragging ? "fileDrop dragging" : "fileDrop"}
+                onDragEnter={(event) => {
+                  event.preventDefault();
+                  setIsDragging(true);
+                }}
+                onDragLeave={(event) => {
+                  event.preventDefault();
+                  setIsDragging(false);
+                }}
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={handleDrop}
+              >
+                <b>トップ用PNG素材をドラッグ＆ドロップ</b>
+                <span>またはクリックしてファイルを選択</span>
+                <small>一覧サムネイルの素材と共有されます</small>
+                <input type="file" accept="image/png" multiple onChange={handleFiles} />
+              </label>
+              <div className="statsLine">
+                <span>使用可能素材：{cliparts.length}枚</span>
+                <span>{clipartDensity === "low" ? "少なめ" : clipartDensity === "high" ? "多め" : "普通"}</span>
+              </div>
+            </section>
+
+            <section className="controlGroup">
+              <div className="sectionTitle">
+                <span>2</span>
+                <h2>トップサムネイルスタイル</h2>
+              </div>
+              <div className="presetGrid">
+                {topStyleOptions.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    className={topStyle === option.value ? "presetCard active" : "presetCard"}
+                    onClick={() => setTopStyle(option.value)}
+                  >
+                    <b>{option.label}</b>
+                    <small>{option.description}</small>
+                  </button>
+                ))}
+              </div>
+              <button className="utilityButton" type="button" onClick={() => setTopSeed(Date.now())}>
+                ランダム配置
+              </button>
+            </section>
+
+            <section className="controlGroup">
+              <div className="sectionTitle">
+                <span>3</span>
+                <h2>カラーパレット</h2>
+              </div>
+              <div className="paletteOptions">
+                {paletteOptions.map((option) => (
+                  <button
+                    className={paletteKey === option.key ? "paletteCard active" : "paletteCard"}
+                    key={`top-${option.key}`}
+                    type="button"
+                    onClick={() => setPaletteKey(option.key)}
+                  >
+                    <b>{option.label}</b>
+                    <small>{option.description}</small>
+                    <span className="colorStrip">
+                      {option.colors.map((color, index) => (
+                        <i
+                          key={`top-${option.key}-${rgbToHex(color)}-${index}`}
+                          style={{ backgroundColor: rgbToHex(color) }}
+                          title={rgbToHex(color)}
+                        />
+                      ))}
+                    </span>
+                    <em>このカラーを使う</em>
+                  </button>
+                ))}
+              </div>
+            </section>
+
+            <section className="controlGroup">
+              <div className="sectionTitle">
+                <span>4</span>
+                <h2>文字とフォント</h2>
+              </div>
+              <label>
+                Main title
+                <input value={topTitle} onChange={(event) => setTopTitle(event.target.value)} />
+              </label>
+              <label>
+                Subtitle
+                <input value={topSubtitle} onChange={(event) => setTopSubtitle(event.target.value)} />
+              </label>
+              <div className="twoColumn">
+                <label>
+                  Small text
+                  <input value={topSmallText} onChange={(event) => setTopSmallText(event.target.value)} />
+                </label>
+                <label>
+                  Badge text
+                  <input value={topBadgeText} onChange={(event) => setTopBadgeText(event.target.value)} />
+                </label>
+              </div>
+              <div className="twoColumn">
+                <label>
+                  Main title font
+                  <select value={topTitleFontKey} onChange={(event) => setTopTitleFontKey(event.target.value as FontKey)}>
+                    {fontOptions.map((font) => (
+                      <option key={font.key} value={font.key}>
+                        {font.label} - {font.sample}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Subtitle font
+                  <select value={topSubtitleFontKey} onChange={(event) => setTopSubtitleFontKey(event.target.value as FontKey)}>
+                    {fontOptions.map((font) => (
+                      <option key={font.key} value={font.key}>
+                        {font.label} - {font.sample}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            </section>
+
+            <section className="controlGroup">
+              <div className="sectionTitle">
+                <span>5</span>
+                <h2>トップ編集</h2>
+              </div>
+              <label className="checkLabel">
+                <input
+                  type="checkbox"
+                  checked={topPanelEnabled}
+                  onChange={(event) => setTopPanelEnabled(event.target.checked)}
+                />
+                <span>テキストパネルを表示</span>
+              </label>
+              <div className="twoColumn">
+                <label>
+                  Text panel shape
+                  <select value={topPanelShape} onChange={(event) => setTopPanelShape(event.target.value as PanelShape)}>
+                    {panelShapeOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Clipart density
+                  <select value={clipartDensity} onChange={(event) => setClipartDensity(event.target.value as ClipartDensity)}>
+                    {densityOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            </section>
+
+            <section className="downloadGroup">
+              <div className="exportSettings">
+                <label>
+                  保存サイズ
+                  <select value={exportSize} onChange={(event) => setExportSize(Number(event.target.value) as ExportSize)}>
+                    {exportSizeOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  保存形式
+                  <select value={exportFormat} onChange={(event) => setExportFormat(event.target.value as ExportFormat)}>
+                    {exportFormatOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <button type="button" onClick={() => void handleTopDownload()}>
+                トップサムネイルを保存
+              </button>
+            </section>
+          </div>
         </aside>
 
         <section className="previewPanel" aria-label="サムネイルプレビュー">
           <div className="previewHeader">
             <div>
               <p>{exportSize} × {exportSize} px / {exportFormat.toUpperCase()}</p>
-              <h2>サムネイルプレビュー</h2>
+              <h2>{creationMode === "grid" ? "一覧サムネイルプレビュー" : "トップサムネイルプレビュー"}</h2>
             </div>
             <span>
-              {activeGrid.columns}×{activeGrid.rows}
+              {creationMode === "grid"
+                ? `${activeGrid.columns}×${activeGrid.rows}`
+                : topStyleOptions.find((option) => option.value === topStyle)?.label}
             </span>
           </div>
           <div className="pageControls">
@@ -1186,7 +1686,7 @@ export default function Home() {
               前のページ
             </button>
             <strong>
-              Page {selectedPage + 1} / {pageCount}
+              {selectedPage + 1}ページ目 / {pageCount}ページ
             </strong>
             <button
               type="button"
@@ -1204,13 +1704,14 @@ export default function Home() {
                 className={selectedPage === index ? "active" : ""}
                 onClick={() => setSelectedPage(index)}
               >
-                Page {index + 1}
+                {index + 1}ページ目
               </button>
             ))}
           </div>
           <div className="previewMeta">
-            <span>表示中：{currentPageAssets.length}枚</span>
-            <span>全素材をページ分割</span>
+            <span>{creationMode === "grid" ? `表示中：${currentPageAssets.length}枚` : `使用素材：${cliparts.length}枚`}</span>
+            <span className="gridOnly">全素材をページ分割</span>
+            <span>{creationMode === "grid" ? "選択ページを保存" : "Etsyトップ画像向け"}</span>
             <span>素材色は変更しません</span>
             <span>透明余白を自動トリミング</span>
           </div>

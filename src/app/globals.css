@@ -48,6 +48,64 @@ select {
   padding: 4px 2px 14px;
 }
 
+.modeSelector {
+  display: grid;
+  grid-template-columns: auto 1fr 1fr;
+  gap: 10px;
+  align-items: center;
+  max-width: 1500px;
+  margin: 0 auto 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 10px;
+}
+
+.modeSelector span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 900;
+  padding: 0 6px;
+}
+
+.modeSelector button,
+.modeButtonRow button,
+.utilityButton {
+  min-height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #ffffff;
+  color: var(--ink);
+  cursor: pointer;
+  font-weight: 900;
+}
+
+.modeSelector button.active,
+.modeButtonRow button.active,
+.utilityButton:hover {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #ffffff;
+}
+
+.modeButtonRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.topModeActive .gridControls,
+.gridModeActive .topControls,
+.topModeActive .pageControls,
+.topModeActive .pageJumpGrid,
+.topModeActive .currentPageDownloads {
+  display: none;
+}
+
+.topModeActive .previewMeta .gridOnly {
+  display: none;
+}
+
 .eyebrow,
 .previewHeader p {
   margin: 0;
@@ -154,6 +212,18 @@ label {
   color: var(--muted);
   font-size: 13px;
   font-weight: 800;
+}
+
+.checkLabel {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  min-height: 40px;
+}
+
+.checkLabel input {
+  width: 18px;
+  min-height: 18px;
 }
 
 input,
@@ -637,6 +707,8 @@ input[type="range"] {
   .fontPreviewGrid,
   .currentPageDownloads,
   .exportSettings,
+  .modeSelector,
+  .modeButtonRow,
   .downloadGroup {
     grid-template-columns: 1fr;
   }
